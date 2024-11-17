@@ -7,7 +7,7 @@ import { JWT_SECRET, JWT_EXPIRES_IN } from '../config/jwt.config.js';
 dotenv.config();
 
 export const register = async (req, res) => {
-  const { name, email, password } = req.body;
+  const { name, email, password, mfaEnabled } = req.body;
 
   try {
     let user = await User.findOne({ email });
@@ -20,6 +20,9 @@ export const register = async (req, res) => {
       name,
       email,
       password,
+      mfaEnabled: mfaEnabled || false,
+      mfaSetup: false,
+      mfaValidated: false
     });
 
     const salt = await bcrypt.genSalt(10);
@@ -39,7 +42,11 @@ export const register = async (req, res) => {
       { expiresIn: 360000 },
       (err, token) => {
         if (err) throw err;
-        res.json({ token });
+        res.json({
+          token,
+          requiresMfaSetup: user.mfaEnabled && !user.mfaSetup,
+          requiresMfaValidation: user.mfaEnabled && user.mfaSetup && !user.mfaValidated
+        });
       }
     );
   } catch (err) {
@@ -50,37 +57,43 @@ export const register = async (req, res) => {
 
 export const login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const email = req.body.email;
+    const password = req.body.password;
 
-    // Validar que existe el usuario
+    if (!email || !password) {
+      return res.status(400).json({ message: 'Email and password are required' });
+    }
+
     const user = await User.findOne({ email });
     if (!user) {
       return res.status(400).json({ message: 'Invalid credentials' });
     }
 
-    // Validar password
     const isValidPassword = await bcrypt.compare(password, user.password);
     if (!isValidPassword) {
       return res.status(400).json({ message: 'Invalid credentials' });
     }
 
-    // Crear token
+    const requiresMfaSetup = user.mfaEnabled && !user.mfaSetup;
+    const requiresMfaValidation = user.mfaEnabled && user.mfaSetup && !user.mfaValidated;
+
     const token = jwt.sign(
       { id: user._id, email: user.email, role: user.role },
       JWT_SECRET,
       { expiresIn: JWT_EXPIRES_IN }
     );
 
-    // Configurar cookie
     res.cookie('token', token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production', // Solo HTTPS en producción
+      secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
-      maxAge: 24 * 60 * 60 * 1000 // 24 horas
+      maxAge: 24 * 60 * 60 * 1000
     });
 
     res.json({
       message: 'Login successful',
+      requiresMfaSetup,
+      requiresMfaValidation,
       user: {
         id: user._id,
         email: user.email,
@@ -93,10 +106,24 @@ export const login = async (req, res) => {
   }
 };
 
-export const logout = (req, res) => {
-  res.cookie('token', '', {
-    httpOnly: true,
-    expires: new Date(0)
-  });
-  res.json({ message: 'Logged out successfully' });
+export const logout = async (req, res) => {
+  try {
+    // Limpiar la cookie del token
+    res.cookie('token', '', {
+      httpOnly: true,
+      expires: new Date(0)
+    });
+
+    // Obtener el ID del usuario desde el token
+    const userId = req.user.id; // Asegúrate de que req.user esté disponible
+
+    // Actualizar el estado de MFA en la base de datos
+    await User.findByIdAndUpdate(userId, { mfaValidated: false });
+
+    // Respuesta de éxito
+    res.json({ message: 'Logged out successfully' });
+  } catch (error) {
+    console.error('Logout error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
 };

@@ -27,7 +27,11 @@ const userSchema = new mongoose.Schema({
     isActive: {
         type: Boolean,
         default: true
-    }
+    },
+    mfaSecret: { type: String },
+    mfaEnabled: { type: Boolean, default: false },
+    mfaSetup: { type: Boolean, default: false },
+    mfaValidated: { type: Boolean, default: false }
 }, {
     timestamps: true,
     versionKey: false
