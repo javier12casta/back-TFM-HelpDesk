@@ -41,10 +41,10 @@ export const register = async (req, res) => {
       process.env.JWT_SECRET,
       { expiresIn: 360000 },
       (err, token) => {
-        if (err) throw err;
+        if (err) throw err;        
         res.json({
           token,
-          requiresMfaSetup: user.mfaEnabled && !user.mfaSetup,
+          requiresMfaSetup: (user.mfaEnabled && user.mfaSetup),
           requiresMfaValidation: user.mfaEnabled && user.mfaSetup && !user.mfaValidated
         });
       }
@@ -74,8 +74,8 @@ export const login = async (req, res) => {
       return res.status(400).json({ message: 'Invalid credentials' });
     }
 
-    const requiresMfaSetup = user.mfaEnabled && !user.mfaSetup;
-    const requiresMfaValidation = user.mfaEnabled && user.mfaSetup && !user.mfaValidated;
+    const requiresMfaSetup = (user.mfaEnabled && user.mfaSetup);
+    const requiresMfaValidation = (user.mfaEnabled && user.mfaSetup && user.mfaValidated);
 
     const token = jwt.sign(
       { id: user._id, email: user.email, role: user.role },

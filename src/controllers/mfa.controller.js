@@ -5,10 +5,8 @@ import User from '../models/user.model.js';
 export const mfaController = {
   generateMFA: async (req, res) => {
     try {
-      console.log(req.body);
-      
       const { userId } = req.body;
-      
+
       if (!userId) {
         return res.status(400).json({
           success: false,
@@ -17,7 +15,7 @@ export const mfaController = {
       }
 
       const user = await User.findById(userId);
-      
+
       if (!user) {
         return res.status(404).json({
           success: false,
@@ -28,16 +26,17 @@ export const mfaController = {
       // Generar secreto
       const secret = speakeasy.generateSecret({
         length: 20,
-        name: `MyApp:${user.email}`,
-        issuer: 'MyApp'
+        name: `BankTicket:${user.email}`,
+        issuer: 'BankTicket',
+        otpauth_url: true,
       });
-
+      
       // Generar QR code
       const qrCodeUrl = await QRCode.toDataURL(secret.otpauth_url);
-
+      
       // Guardar secreto temporalmente
       user.mfaSecret = secret.base32;
-      user.mfaEnabled = false; // No habilitado hasta que se verifique
+      user.mfaEnabled = user.mfaEnabled ? user.mfaEnabled : false; // No habilitado hasta que se verifique
       await user.save();
 
       res.json({
@@ -86,6 +85,7 @@ export const mfaController = {
       if (verified) {
         user.mfaEnabled = true;
         user.mfaSetup = true;
+        user.mfaValidated = true;
         await user.save();
       }
 
