@@ -110,10 +110,6 @@ export const login = async (req, res) => {
 
 export const logout = async (req, res) => {
   try {
-    const token2 = req.cookies.token;
-    console.log('====================================');
-    console.log(req.cookies.token);
-    console.log('====================================');
     // Limpiar la cookie del token
     res.cookie('token', '', {
       httpOnly: true,
