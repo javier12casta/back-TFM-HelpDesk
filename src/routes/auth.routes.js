@@ -5,7 +5,7 @@ import { authMiddleware } from '../middlewares/auth.middleware.js';
 const router = express.Router();
 
 router.post('/login', login);
-router.post('/logout', authMiddleware, logout);
+router.get('/logout', authMiddleware, logout);
 
 // Ruta protegida de ejemplo
 router.get('/protected', authMiddleware, (req, res) => {

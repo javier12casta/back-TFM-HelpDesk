@@ -83,10 +83,12 @@ export const login = async (req, res) => {
       { expiresIn: JWT_EXPIRES_IN }
     );
 
+    const expiryDate = new Date();
+    expiryDate.setMinutes(expiryDate.getMinutes() + 1440);
     res.cookie('token', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: 'Lax',
       maxAge: 24 * 60 * 60 * 1000
     });
 
@@ -108,15 +110,23 @@ export const login = async (req, res) => {
 
 export const logout = async (req, res) => {
   try {
+    const token2 = req.cookies.token;
+    console.log('====================================');
+    console.log(req.cookies.token);
+    console.log('====================================');
     // Limpiar la cookie del token
     res.cookie('token', '', {
       httpOnly: true,
       expires: new Date(0)
     });
 
-    // Obtener el ID del usuario desde el token
-    const userId = req.user.id; // Asegúrate de que req.user esté disponible
-
+    // Obtener el ID del usuario desde el token de las cookies
+    const token = req.cookies.token;
+    if (!token) {
+      return res.status(401).json({ message: 'No token, authorization denied' });
+    }
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const userId = decoded.id;
     // Actualizar el estado de MFA en la base de datos
     await User.findByIdAndUpdate(userId, { mfaValidated: false });
 

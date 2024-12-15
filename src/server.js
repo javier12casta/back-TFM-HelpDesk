@@ -9,16 +9,41 @@ dotenv.config();
 
 const app = express();
 
-// Middleware
-app.use(cors({
-    origin: '*',
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
-    allowedHeaders: ['Content-Type', 'Authorization']
-}));
+// Configuración de CORS más específica
+const corsOptions = {
+    origin: process.env.NODE_ENV === 'development' 
+        ? ['http://localhost:4300', 'http://localhost:3000']
+        : process.env.CLIENT_URL,
+    credentials: true,  // Importante para cookies
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: [
+        'Content-Type',
+        'Authorization',
+        'X-Requested-With',
+        'Accept',
+        'Origin'
+    ],
+    exposedHeaders: ['Authorization', 'Set-Cookie'],
+    maxAge: 600 // Cache preflight por 10 minutos
+};
+
+app.use(cors(corsOptions));
+
+// Configuración de cookies // Firma las cookies con el secreto JWT
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
+// Middleware para configurar headers de seguridad
+app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Credentials', 'true');
+    res.header('Access-Control-Allow-Origin', req.headers.origin);
+    res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS');
+    res.header(
+        'Access-Control-Allow-Headers',
+        'Origin, X-Requested-With, Content-Type, Accept, Authorization'
+    );
+    next();
+});
 
 // Conectar a MongoDB
 connectDB();
@@ -26,6 +51,7 @@ connectDB();
 // Rutas
 app.use('/api/auth', authRoutes);
 app.use('/api', userRoutes);
+
 // Ruta de prueba
 app.get('/', (req, res) => {
     res.json({ message: 'Bienvenido a la API de HelpDesk' });

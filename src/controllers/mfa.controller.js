@@ -26,8 +26,8 @@ export const mfaController = {
       // Generar secreto
       const secret = speakeasy.generateSecret({
         length: 20,
-        name: `BankTicket:${user.email}`,
-        issuer: 'BankTicket',
+        name: `QBank:${user.email}`,
+        issuer: 'QBank',
         otpauth_url: true,
       });
       

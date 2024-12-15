@@ -3,11 +3,12 @@ import { JWT_SECRET } from '../config/jwt.config.js';
 
 export const authMiddleware = (req, res, next) => {
     try {
-        // Obtener token de las cookies
+        console.log('Cookies recibidas:', req.cookies); // Depura todas las cookies
         const token = req.cookies.token;
 
         if (!token) {
-            return res.status(401).json({ message: 'No token provided' });
+            console.log('No hay token en las cookies');
+            return res.status(401).json({ message: 'No token, authorization denied' });
         }
 
         // Verificar token
@@ -15,6 +16,7 @@ export const authMiddleware = (req, res, next) => {
         req.user = decoded;
         next();
     } catch (error) {
-        return res.status(401).json({ message: 'Invalid token' });
+        console.error('Error al verificar el token:', error.message);
+        return res.status(401).json({ message: 'Token is not valid' });
     }
 };
