@@ -5,6 +5,9 @@ import cors from 'cors';
 import { connectDB } from './config/db.config.js';
 import authRoutes from './routes/auth.routes.js';
 import { userRoutes } from './routes/user.routes.js';
+import { ticketRoutes } from './routes/ticket.routes.js';
+import { categoryRoutes } from './routes/category.routes.js';
+
 dotenv.config();
 
 const app = express();
@@ -51,6 +54,8 @@ connectDB();
 // Rutas
 app.use('/api/auth', authRoutes);
 app.use('/api', userRoutes);
+app.use('/api', ticketRoutes);
+app.use('/api', categoryRoutes);
 
 // Ruta de prueba
 app.get('/', (req, res) => {
