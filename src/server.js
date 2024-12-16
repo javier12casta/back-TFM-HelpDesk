@@ -8,6 +8,8 @@ import { userRoutes } from './routes/user.routes.js';
 import { ticketRoutes } from './routes/ticket.routes.js';
 import { categoryRoutes } from './routes/category.routes.js';
 import { reportRoutes } from './routes/report.routes.js';
+import swaggerUi from 'swagger-ui-express';
+import { swaggerSpec } from './config/swagger.config.js';
 
 dotenv.config();
 
@@ -63,6 +65,9 @@ app.use('/api', reportRoutes);
 app.get('/', (req, res) => {
     res.json({ message: 'Bienvenido a la API de HelpDesk' });
 });
+
+// Documentación Swagger
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 const PORT = process.env.PORT || 5000;
 

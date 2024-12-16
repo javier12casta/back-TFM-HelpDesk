@@ -14,7 +14,31 @@ import { authMiddleware } from '../middlewares/auth.middleware.js';
 
 const reportRoutes = express.Router();
 
-// Rutas para reportes con validación
+/**
+ * @swagger
+ * /api/reports/tickets/stats:
+ *   get:
+ *     summary: Obtener estadísticas de tickets
+ *     tags: [Reportes]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: startDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Fecha de inicio
+ *       - in: query
+ *         name: endDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Fecha de fin
+ *     responses:
+ *       200:
+ *         description: Estadísticas obtenidas exitosamente
+ */
 reportRoutes.get('/reports/tickets/stats', 
   authMiddleware, 
   validateReportQuery, 
