@@ -7,6 +7,7 @@ import authRoutes from './routes/auth.routes.js';
 import { userRoutes } from './routes/user.routes.js';
 import { ticketRoutes } from './routes/ticket.routes.js';
 import { categoryRoutes } from './routes/category.routes.js';
+import { reportRoutes } from './routes/report.routes.js';
 
 dotenv.config();
 
@@ -56,6 +57,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api', userRoutes);
 app.use('/api', ticketRoutes);
 app.use('/api', categoryRoutes);
+app.use('/api', reportRoutes);
 
 // Ruta de prueba
 app.get('/', (req, res) => {
