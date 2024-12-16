@@ -5,7 +5,8 @@ import {
   getTicketById,
   updateTicket,
   deleteTicket,
-  getTicketsByCategory
+  getTicketsByCategory,
+  getTicketHistory
 } from '../controllers/ticket.controller.js';
 import { validateTicket } from '../middlewares/validation.middleware.js';
 import { authMiddleware } from '../middlewares/auth.middleware.js';
@@ -21,5 +22,10 @@ ticketRoutes.delete('/tickets/:id', authMiddleware, deleteTicket);
 
 // Rutas adicionales
 ticketRoutes.get('/tickets/category/:category', authMiddleware, getTicketsByCategory);
+ticketRoutes.get(
+  '/tickets/:id/history', 
+  authMiddleware, 
+  getTicketHistory
+);
 
 export { ticketRoutes }; 
