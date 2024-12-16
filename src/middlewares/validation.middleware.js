@@ -20,11 +20,10 @@ export const validateTicket = [
     .isIn(['Baja', 'Media', 'Alta'])
     .withMessage('Prioridad no válida'),
 
-  check('clientId')
-    .notEmpty()
-    .withMessage('El ID del cliente es requerido')
+    check('clientId')
+    .optional()
     .isMongoId()
-    .withMessage('ID de cliente no válido'),
+    .withMessage('ID de cliente no válido'),  
 
   (req, res, next) => {
     const errors = validationResult(req);

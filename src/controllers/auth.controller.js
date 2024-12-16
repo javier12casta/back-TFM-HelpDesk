@@ -78,17 +78,15 @@ export const login = async (req, res) => {
     const requiresMfaValidation = (user.mfaEnabled && user.mfaSetup && user.mfaValidated);
 
     const token = jwt.sign(
-      { id: user._id, email: user.email, role: user.role },
+      { id: user._id, role: user.role },
       JWT_SECRET,
-      { expiresIn: JWT_EXPIRES_IN }
+      { expiresIn: '24h' }
     );
 
-    const expiryDate = new Date();
-    expiryDate.setMinutes(expiryDate.getMinutes() + 1440);
     res.cookie('token', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'Lax',
+      sameSite: 'strict',
       maxAge: 24 * 60 * 60 * 1000
     });
 
@@ -110,26 +108,9 @@ export const login = async (req, res) => {
 
 export const logout = async (req, res) => {
   try {
-    // Limpiar la cookie del token
-    res.cookie('token', '', {
-      httpOnly: true,
-      expires: new Date(0)
-    });
-
-    // Obtener el ID del usuario desde el token de las cookies
-    const token = req.cookies.token;
-    if (!token) {
-      return res.status(401).json({ message: 'No token, authorization denied' });
-    }
-    const decoded = jwt.verify(token, JWT_SECRET);
-    const userId = decoded.id;
-    // Actualizar el estado de MFA en la base de datos
-    await User.findByIdAndUpdate(userId, { mfaValidated: false });
-
-    // Respuesta de éxito
+    res.clearCookie('token');
     res.json({ message: 'Logged out successfully' });
   } catch (error) {
-    console.error('Logout error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: error.message });
   }
 };

@@ -14,29 +14,30 @@ const logTicketChange = async (ticketId, userId, changeType, previousData, curre
       },
       ipAddress: req.ip,
       userAgent: req.headers['user-agent'],
-      notes: req.body.notes // Opcional: notas sobre el cambio
+      notes: req.body.notes
     });
 
     await historyEntry.save();
   } catch (error) {
     console.error('Error al registrar historial:', error);
-    // No lanzamos el error para no interrumpir la operación principal
   }
 };
 
 export const createTicket = async (req, res) => {
   try {
+    const userId = req.user.id;
+
     const newTicket = new Ticket({
       ...req.body,
-      ticketNumber: `TKT-${Date.now()}`
+      ticketNumber: `TKT-${Date.now()}`,
+      clientId: userId
     });
     
     const savedTicket = await newTicket.save();
 
-    // Registrar la creación en el historial
     await logTicketChange(
       savedTicket._id,
-      req.user.id, // Del middleware de autenticación
+      userId,
       'CREATED',
       null,
       savedTicket.toObject(),
@@ -51,7 +52,15 @@ export const createTicket = async (req, res) => {
 
 export const getAllTickets = async (req, res) => {
   try {
-    const tickets = await Ticket.find()
+    const userId = req.user.id;
+    const userRole = req.user.role;
+
+    let query = {};
+    if (userRole !== 'admin') {
+      query = { clientId: userId };
+    }
+
+    const tickets = await Ticket.find(query)
       .populate('clientId', 'name email')
       .populate('assignedTo', 'name email');
     res.json(tickets);
@@ -62,12 +71,21 @@ export const getAllTickets = async (req, res) => {
 
 export const getTicketById = async (req, res) => {
   try {
+    const userId = req.user.id;
+    const userRole = req.user.role;
+
     const ticket = await Ticket.findById(req.params.id)
       .populate('clientId', 'name email')
       .populate('assignedTo', 'name email');
+
     if (!ticket) {
       return res.status(404).json({ message: 'Ticket no encontrado' });
     }
+
+    if (userRole !== 'admin' && ticket.clientId.toString() !== userId) {
+      return res.status(403).json({ message: 'No tiene permiso para ver este ticket' });
+    }
+
     res.json(ticket);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -76,14 +94,19 @@ export const getTicketById = async (req, res) => {
 
 export const updateTicket = async (req, res) => {
   try {
-    // Obtener el ticket actual antes de actualizarlo
+    const userId = req.user.id;
+    const userRole = req.user.role;
+
     const previousTicket = await Ticket.findById(req.params.id);
     
     if (!previousTicket) {
       return res.status(404).json({ message: 'Ticket no encontrado' });
     }
 
-    // Determinar el tipo de cambio
+    if (userRole !== 'admin' && previousTicket.clientId.toString() !== userId) {
+      return res.status(403).json({ message: 'No tiene permiso para actualizar este ticket' });
+    }
+
     let changeType = 'UPDATED';
     if (req.body.status && req.body.status !== previousTicket.status) {
       changeType = 'STATUS_CHANGE';
@@ -102,10 +125,9 @@ export const updateTicket = async (req, res) => {
       { new: true }
     );
 
-    // Registrar el cambio en el historial
     await logTicketChange(
       updatedTicket._id,
-      req.user.id,
+      userId,
       changeType,
       previousTicket.toObject(),
       updatedTicket.toObject(),
@@ -120,10 +142,30 @@ export const updateTicket = async (req, res) => {
 
 export const deleteTicket = async (req, res) => {
   try {
-    const deletedTicket = await Ticket.findByIdAndDelete(req.params.id);
-    if (!deletedTicket) {
+    const userId = req.user.id;
+    const userRole = req.user.role;
+
+    const ticket = await Ticket.findById(req.params.id);
+    
+    if (!ticket) {
       return res.status(404).json({ message: 'Ticket no encontrado' });
     }
+
+    if (userRole !== 'admin') {
+      return res.status(403).json({ message: 'No tiene permiso para eliminar tickets' });
+    }
+
+    await Ticket.findByIdAndDelete(req.params.id);
+
+    await logTicketChange(
+      ticket._id,
+      userId,
+      'DELETED',
+      ticket.toObject(),
+      null,
+      req
+    );
+
     res.json({ message: 'Ticket eliminado correctamente' });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -132,16 +174,38 @@ export const deleteTicket = async (req, res) => {
 
 export const getTicketsByCategory = async (req, res) => {
   try {
-    const tickets = await Ticket.find({ category: req.params.category });
+    const userId = req.user.id;
+    const userRole = req.user.role;
+
+    let query = { category: req.params.category };
+    
+    if (userRole !== 'admin') {
+      query.clientId = userId;
+    }
+
+    const tickets = await Ticket.find(query)
+      .populate('clientId', 'name email')
+      .populate('assignedTo', 'name email');
     res.json(tickets);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
 
-// Nuevo endpoint para consultar el historial de un ticket
 export const getTicketHistory = async (req, res) => {
   try {
+    const userId = req.user.id;
+    const userRole = req.user.role;
+
+    const ticket = await Ticket.findById(req.params.id);
+    if (!ticket) {
+      return res.status(404).json({ message: 'Ticket no encontrado' });
+    }
+
+    if (userRole !== 'admin' && ticket.clientId.toString() !== userId) {
+      return res.status(403).json({ message: 'No tiene permiso para ver este historial' });
+    }
+
     const history = await TicketHistory.find({ ticketId: req.params.id })
       .populate('changedBy', 'name email')
       .sort({ timestamp: -1 });

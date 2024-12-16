@@ -30,15 +30,15 @@ const corsOptions = {
         'Origin'
     ],
     exposedHeaders: ['Authorization', 'Set-Cookie'],
-    maxAge: 600 // Cache preflight por 10 minutos
+    maxAge: 600
 };
 
 app.use(cors(corsOptions));
 
-// Configuración de cookies // Firma las cookies con el secreto JWT
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Configuración de cookies
 app.use(cookieParser());
+app.use(express.json());
+
 // Middleware para configurar headers de seguridad
 app.use((req, res, next) => {
     res.header('Access-Control-Allow-Credentials', 'true');
