@@ -6,14 +6,28 @@ const ticketSchema = new mongoose.Schema({
     required: true,
     unique: true
   },
-  category: {
-    type: String,
-    required: true,
-    enum: ['Atención al Cliente', 'Operaciones Bancarias', 'Reclamos', 'Servicios Digitales']
-  },
   description: {
     type: String,
     required: true
+  },
+  category: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Category',
+    required: true
+  },
+  subcategory: {
+    nombre_subcategoria: {
+      type: String,
+      required: true
+    },
+    descripcion_subcategoria: String,
+    subcategoria_detalle: {
+      nombre_subcategoria_detalle: {
+        type: String,
+        required: true
+      },
+      descripcion: String
+    }
   },
   status: {
     type: String,
@@ -35,6 +49,11 @@ const ticketSchema = new mongoose.Schema({
   assignedTo: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
+  },
+  area: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Area',
+    required: false
   },
   createdAt: {
     type: Date,

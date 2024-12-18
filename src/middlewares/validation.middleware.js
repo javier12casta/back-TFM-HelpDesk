@@ -1,4 +1,5 @@
 import { check, validationResult } from 'express-validator';
+import mongoose from 'mongoose';
 
 // Validación para creación y actualización de tickets
 export const validateTicket = [
@@ -8,22 +9,39 @@ export const validateTicket = [
     .isLength({ min: 10 })
     .withMessage('La descripción debe tener al menos 10 caracteres'),
   
-  check('category')
+  check('categoryId')
     .notEmpty()
     .withMessage('La categoría es requerida')
-    .isIn(['Atención al Cliente', 'Operaciones Bancarias', 'Reclamos', 'Servicios Digitales'])
-    .withMessage('Categoría no válida'),
+    .custom((value) => {
+      return mongoose.Types.ObjectId.isValid(value);
+    })
+    .withMessage('ID de categoría no válido'),
+  
+  check('subcategory')
+    .notEmpty()
+    .withMessage('La subcategoría es requerida')
+    .isObject()
+    .withMessage('Formato de subcategoría inválido'),
+  
+  check('subcategory.nombre_subcategoria')
+    .notEmpty()
+    .withMessage('El nombre de la subcategoría es requerido'),
+  
+  check('subcategory.subcategoria_detalle')
+    .notEmpty()
+    .withMessage('El detalle de la subcategoría es requerido')
+    .isObject()
+    .withMessage('Formato de detalle de subcategoría inválido'),
+  
+  check('subcategory.subcategoria_detalle.nombre_subcategoria_detalle')
+    .notEmpty()
+    .withMessage('El nombre del detalle de la subcategoría es requerido'),
   
   check('priority')
     .notEmpty()
     .withMessage('La prioridad es requerida')
     .isIn(['Baja', 'Media', 'Alta'])
     .withMessage('Prioridad no válida'),
-
-    check('clientId')
-    .optional()
-    .isMongoId()
-    .withMessage('ID de cliente no válido'),  
 
   (req, res, next) => {
     const errors = validationResult(req);
