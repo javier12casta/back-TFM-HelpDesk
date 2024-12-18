@@ -6,7 +6,8 @@ import {
   updateTicket,
   deleteTicket,
   getTicketsByCategory,
-  getTicketHistory
+  getTicketHistory,
+  assignTicket
 } from '../controllers/ticket.controller.js';
 import { validateTicket } from '../middlewares/validation.middleware.js';
 import { authMiddleware } from '../middlewares/auth.middleware.js';
@@ -214,5 +215,6 @@ ticketRoutes.get('/tickets/:id/history', authMiddleware, getTicketHistory);
 ticketRoutes.get('/tickets/category/:category', authMiddleware, getTicketsByCategory);
 ticketRoutes.put('/tickets/:id', authMiddleware, validateTicket, updateTicket);
 ticketRoutes.delete('/tickets/:id', authMiddleware, deleteTicket);
+ticketRoutes.post('/tickets/assign', authMiddleware, assignTicket);
 
 export { ticketRoutes }; 

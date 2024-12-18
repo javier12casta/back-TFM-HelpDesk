@@ -7,9 +7,12 @@ import authRoutes from './routes/auth.routes.js';
 import { userRoutes } from './routes/user.routes.js';
 import { ticketRoutes } from './routes/ticket.routes.js';
 import { categoryRoutes } from './routes/category.routes.js';
+import { areaRoutes } from './routes/area.routes.js';
 import { reportRoutes } from './routes/report.routes.js';
 import swaggerUi from 'swagger-ui-express';
 import { swaggerSpec } from './config/swagger.config.js';
+import http from 'http';
+import { Server } from 'socket.io';
 
 dotenv.config();
 
@@ -59,6 +62,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api', userRoutes);
 app.use('/api', ticketRoutes);
 app.use('/api', categoryRoutes);
+app.use('/api', areaRoutes);
 app.use('/api', reportRoutes);
 
 // Ruta de prueba
@@ -69,8 +73,18 @@ app.get('/', (req, res) => {
 // Documentación Swagger
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
+const server = http.createServer(app);
+export const io = new Server(server);
+
+// Configurar eventos de Socket.IO
+io.on('connection', (socket) => {
+    console.log('Un usuario se ha conectado');
+
+    // Puedes agregar más eventos aquí según sea necesario
+});
+
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
+server.listen(PORT, () => {
     console.log(`Servidor corriendo en puerto ${PORT}`);
 });

@@ -1,6 +1,6 @@
 import express from 'express';
 import {
-  createCategory,
+  createCategories,
   getAllCategories,
   getCategoryById,
   updateCategory,
@@ -9,8 +9,10 @@ import {
 
 const categoryRoutes = express.Router();
 
+// Ruta para crear múltiples categorías
+categoryRoutes.post('/categories/bulk', createCategories);
+
 // Rutas CRUD básicas
-categoryRoutes.post('/categories', createCategory);
 categoryRoutes.get('/categories', getAllCategories);
 categoryRoutes.get('/categories/:id', getCategoryById);
 categoryRoutes.put('/categories/:id', updateCategory);

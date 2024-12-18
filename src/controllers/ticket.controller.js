@@ -1,5 +1,7 @@
 import Ticket from '../models/ticket.model.js';
 import TicketHistory from '../models/ticket-history.model.js';
+import transporter from '../config/nodemailer.config.js';
+import { io } from '../server.js';
 
 // Función auxiliar para registrar cambios
 const logTicketChange = async (ticketId, userId, changeType, previousData, currentData, req) => {
@@ -34,6 +36,20 @@ export const createTicket = async (req, res) => {
     });
     
     const savedTicket = await newTicket.save();
+
+    io.emit('ticketCreated', {
+      ticket: savedTicket,
+      message: `Nuevo ticket creado: ${savedTicket.ticketNumber}`
+    });
+
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: req.body.assignedTo,
+      subject: 'Nuevo Ticket Creado',
+      text: `Se ha creado un nuevo ticket: ${savedTicket.ticketNumber}. Descripción: ${savedTicket.description}`
+    };
+
+    await transporter.sendMail(mailOptions);
 
     await logTicketChange(
       savedTicket._id,
@@ -213,5 +229,39 @@ export const getTicketHistory = async (req, res) => {
     res.json(history);
   } catch (error) {
     res.status(500).json({ message: error.message });
+  }
+};
+
+export const assignTicket = async (req, res) => {
+  try {
+    const { ticketId, assignedTo } = req.body;
+
+    const ticket = await Ticket.findById(ticketId);
+    if (!ticket) {
+      return res.status(404).json({ message: 'Ticket no encontrado' });
+    }
+
+    ticket.assignedTo = assignedTo; // Asignar el nuevo agente
+    const updatedTicket = await ticket.save();
+
+    // Notificar a los involucrados mediante Socket.IO
+    io.emit('ticketAssigned', {
+      ticket: updatedTicket,
+      message: `Ticket ${updatedTicket.ticketNumber} ha sido asignado a ${assignedTo}`
+    });
+
+    // Enviar correo electrónico al nuevo agente asignado
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: assignedTo, // Correo del nuevo agente
+      subject: 'Ticket Asignado',
+      text: `Se te ha asignado un nuevo ticket: ${updatedTicket.ticketNumber}. Descripción: ${updatedTicket.description}`
+    };
+
+    await transporter.sendMail(mailOptions);
+
+    res.json(updatedTicket);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
   }
 };
