@@ -91,7 +91,8 @@ export const io = new Server(server, {
       'Accept',
       'Origin'
     ]
-  }
+  },
+  allowEIO3: true
 });
 
 // Configurar eventos de Socket.IO
