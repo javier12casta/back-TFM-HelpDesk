@@ -4,6 +4,7 @@ import Category from '../models/category.model.js';
 import Area from '../models/area.model.js';
 import transporter from '../config/nodemailer.config.js';
 import { io } from '../server.js';
+import { createNotification } from './notification.controller.js';
 
 // Función auxiliar para registrar cambios
 const logTicketChange = async (ticketId, userId, changeType, previousData, currentData, req) => {
@@ -142,44 +143,30 @@ export const createTicket = async (req, res) => {
     
     const savedTicket = await newTicket.save();
 
+    // Crear notificación para el creador del ticket
+    await createNotification(userId, {
+      type: 'success',
+      title: 'Ticket Creado',
+      message: `Tu ticket ${savedTicket.ticketNumber} ha sido creado exitosamente`,
+      ticketId: savedTicket._id
+    });
+
+    // Si hay un agente asignado, crear notificación para él
+    if (assignedTo) {
+      await createNotification(assignedTo, {
+        type: 'info',
+        title: 'Nuevo Ticket Asignado',
+        message: `Se te ha asignado el ticket ${savedTicket.ticketNumber}`,
+        ticketId: savedTicket._id
+      });
+    }
+
     // Poblar los campos de referencia para la respuesta
     const populatedTicket = await Ticket.findById(savedTicket._id)
       .populate('category', 'nombre_categoria descripcion_categoria')
       .populate('area', 'area detalle')
       .populate('clientId', 'name email')
       .populate('assignedTo', 'name email');
-
-    // Notificar al creador del ticket
-    io.to(userId).emit('ticketCreated', {
-      ticket: populatedTicket,
-      message: `Tu ticket ${savedTicket.ticketNumber} ha sido creado exitosamente`
-    });
-
-    // Si hay un agente asignado, notificarle también
-    if (assignedTo) {
-      io.to(assignedTo).emit('ticketAssigned', {
-        ticket: populatedTicket,
-        message: `Se te ha asignado un nuevo ticket: ${savedTicket.ticketNumber}`
-      });
-
-      // Enviar correo al agente asignado
-      const mailOptions = {
-        from: process.env.EMAIL_USER,
-        to: populatedTicket.assignedTo.email,
-        subject: 'Nuevo Ticket Asignado',
-        text: `
-          Se ha creado un nuevo ticket: ${savedTicket.ticketNumber}
-          Descripción: ${description}
-          Categoría: ${populatedTicket.category.nombre_categoria}
-          Subcategoría: ${subcategory.nombre_subcategoria}
-          Detalle: ${subcategory.subcategoria_detalle.nombre_subcategoria_detalle}
-          Área: ${populatedTicket.area.area}
-          Prioridad: ${priority}
-        `
-      };
-
-      await transporter.sendMail(mailOptions);
-    }
 
     // Notificar a los administradores (si es necesario)
     io.to('admin').emit('newTicket', {

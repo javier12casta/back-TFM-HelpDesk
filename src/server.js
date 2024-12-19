@@ -13,6 +13,8 @@ import swaggerUi from 'swagger-ui-express';
 import { swaggerSpec } from './config/swagger.config.js';
 import http from 'http';
 import { Server } from 'socket.io';
+import { notificationRoutes } from './routes/notification.routes.js';
+import { getUserStoredNotifications } from './controllers/notification.controller.js';
 
 dotenv.config();
 
@@ -64,6 +66,7 @@ app.use('/api', ticketRoutes);
 app.use('/api', categoryRoutes);
 app.use('/api', areaRoutes);
 app.use('/api', reportRoutes);
+app.use('/api', notificationRoutes);
 
 // Ruta de prueba
 app.get('/', (req, res) => {
@@ -92,12 +95,20 @@ export const io = new Server(server, {
 });
 
 // Configurar eventos de Socket.IO
-io.on('connection', (socket) => {
+io.on('connection', async (socket) => {
     console.log('Usuario conectado:', socket.id);
 
-    socket.on('joinRoom', (userId) => {
+    socket.on('joinRoom', async (userId) => {
         socket.join(userId);
         console.log(`Usuario ${userId} unido a su sala personal`);
+
+        try {
+            // Obtener y enviar notificaciones almacenadas al usuario
+            const storedNotifications = await getUserStoredNotifications(userId);
+            socket.emit('stored-notifications', storedNotifications);
+        } catch (error) {
+            console.error('Error al enviar notificaciones almacenadas:', error);
+        }
     });
 
     socket.on('disconnect', () => {
