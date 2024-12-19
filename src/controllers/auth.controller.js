@@ -116,9 +116,32 @@ export const login = async (req, res) => {
 
 export const logout = async (req, res) => {
   try {
-    res.clearCookie('token');
+    // Obtener el token de las cookies
+    const token = req.cookies.token;
+    
+    if (token) {
+      try {
+        // Decodificar el token para obtener el ID del usuario
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        
+        // Actualizar el estado de MFA del usuario
+        await User.findByIdAndUpdate(decoded.id, {
+          mfaValidated: false
+        });
+      } catch (tokenError) {
+        console.error('Error al decodificar token durante logout:', tokenError);
+      }
+    }
+
+    // Limpiar la cookie
+    res.clearCookie('token', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production'
+    });
+
     res.json({ message: 'Logged out successfully' });
   } catch (error) {
+    console.error('Error durante logout:', error);
     res.status(500).json({ message: error.message });
   }
 };
