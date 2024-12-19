@@ -149,14 +149,20 @@ export const createTicket = async (req, res) => {
       .populate('clientId', 'name email')
       .populate('assignedTo', 'name email');
 
-    // Notificar por Socket.IO
-    io.emit('ticketCreated', {
+    // Notificar al creador del ticket
+    io.to(userId).emit('ticketCreated', {
       ticket: populatedTicket,
-      message: `Nuevo ticket creado: ${savedTicket.ticketNumber}`
+      message: `Tu ticket ${savedTicket.ticketNumber} ha sido creado exitosamente`
     });
 
-    // Enviar correo si hay un agente asignado
+    // Si hay un agente asignado, notificarle también
     if (assignedTo) {
+      io.to(assignedTo).emit('ticketAssigned', {
+        ticket: populatedTicket,
+        message: `Se te ha asignado un nuevo ticket: ${savedTicket.ticketNumber}`
+      });
+
+      // Enviar correo al agente asignado
       const mailOptions = {
         from: process.env.EMAIL_USER,
         to: populatedTicket.assignedTo.email,
@@ -174,6 +180,12 @@ export const createTicket = async (req, res) => {
 
       await transporter.sendMail(mailOptions);
     }
+
+    // Notificar a los administradores (si es necesario)
+    io.to('admin').emit('newTicket', {
+      ticket: populatedTicket,
+      message: `Nuevo ticket creado: ${savedTicket.ticketNumber}`
+    });
 
     await logTicketChange(
       savedTicket._id,

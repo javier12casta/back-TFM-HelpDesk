@@ -74,17 +74,40 @@ app.get('/', (req, res) => {
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 const server = http.createServer(app);
-export const io = new Server(server);
+export const io = new Server(server, {
+  cors: {
+    origin: process.env.NODE_ENV === 'development' 
+      ? ['http://localhost:4300', 'http://localhost:3000']
+      : process.env.CLIENT_URL,
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-Requested-With',
+      'Accept',
+      'Origin'
+    ]
+  }
+});
 
 // Configurar eventos de Socket.IO
 io.on('connection', (socket) => {
-    console.log('Un usuario se ha conectado');
+    console.log('Usuario conectado:', socket.id);
 
-    // Puedes agregar más eventos aquí según sea necesario
+    socket.on('joinRoom', (userId) => {
+        socket.join(userId);
+        console.log(`Usuario ${userId} unido a su sala personal`);
+    });
+
+    socket.on('disconnect', () => {
+        console.log('Usuario desconectado:', socket.id);
+    });
 });
 
-const PORT = process.env.PORT || 5000;
+// Usar PORT para ambos servicios (HTTP y WebSocket)
+const PORT = process.env.PORT || 3000;
 
 server.listen(PORT, () => {
-    console.log(`Servidor corriendo en puerto ${PORT}`);
+    console.log(`Servidor HTTP y WebSocket corriendo en puerto ${PORT}`);
 });
