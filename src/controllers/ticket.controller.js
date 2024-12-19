@@ -205,7 +205,44 @@ export const getAllTickets = async (req, res) => {
       .populate('assignedTo', 'name email')
       .populate('area', 'area');
 
-    res.json(tickets);
+    // Obtener todas las categorías para acceder a los colores de las subcategorías
+    const categories = await Category.find();
+
+    // Mapear los tickets para incluir el color de la subcategoría
+    const ticketsWithSubcategoryColors = await Promise.all(tickets.map(async (ticket) => {
+      const ticketObj = ticket.toObject();
+      
+      // Buscar la categoría correspondiente
+      const fullCategory = categories.find(cat => 
+        cat._id.toString() === ticket.category._id.toString()
+      );
+
+      if (fullCategory) {
+        // Buscar la subcategoría correspondiente
+        const subcategoria = fullCategory.subcategorias.find(
+          sub => sub.nombre_subcategoria === ticket.subcategory.nombre_subcategoria
+        );
+
+        if (subcategoria) {
+          // Agregar el color y el ID de la subcategoría a la respuesta
+          ticketObj.subcategory = {
+            ...ticketObj.subcategory,
+            _id: subcategoria._id,
+            color_subcategoria: subcategoria.color_subcategoria,
+            subcategoria_detalle: {
+              ...ticketObj.subcategory.subcategoria_detalle,
+              _id: subcategoria.subcategorias_detalle.find(
+                det => det.nombre_subcategoria_detalle === ticket.subcategory.subcategoria_detalle.nombre_subcategoria_detalle
+              )?._id
+            }
+          };
+        }
+      }
+
+      return ticketObj;
+    }));
+
+    res.json(ticketsWithSubcategoryColors);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
