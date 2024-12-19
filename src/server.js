@@ -15,6 +15,8 @@ import http from 'http';
 import { Server } from 'socket.io';
 import { notificationRoutes } from './routes/notification.routes.js';
 import { getUserStoredNotifications, markNotificationAsRead } from './controllers/notification.controller.js';
+import { roleRoutes } from './routes/role.routes.js';
+import { menuRoutes } from './routes/menu.routes.js';
 
 dotenv.config();
 
@@ -67,6 +69,8 @@ app.use('/api', categoryRoutes);
 app.use('/api', areaRoutes);
 app.use('/api', reportRoutes);
 app.use('/api', notificationRoutes);
+app.use('/api', roleRoutes);
+app.use('/api', menuRoutes);
 
 // Ruta de prueba
 app.get('/', (req, res) => {
