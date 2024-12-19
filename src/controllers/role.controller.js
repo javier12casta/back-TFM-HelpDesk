@@ -83,4 +83,63 @@ export const deleteRole = async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
+};
+
+export const initializeDefaultRoles = async (req, res) => {
+  try {
+    const defaultPermissions = ['ver', 'crear', 'editar', 'borrar', 'reportes', 'dashboard'];
+
+    const roles = [
+      {
+        name: 'admin',
+        description: 'Administrador del sistema con acceso total',
+        permissions: defaultPermissions
+      },
+      {
+        name: 'user',
+        description: 'Usuario regular del sistema',
+        permissions: ['ver']
+      },
+      {
+        name: 'supervisor',
+        description: 'Supervisor con acceso a reportes y dashboard',
+        permissions: ['ver', 'reportes', 'dashboard']
+      },
+      {
+        name: 'soporte',
+        description: 'Personal de soporte técnico',
+        permissions: ['ver', 'crear', 'editar']
+      },
+      {
+        name: 'gerente',
+        description: 'Gerente con acceso a reportes y dashboard',
+        permissions: ['ver', 'reportes', 'dashboard', 'editar']
+      }
+    ];
+
+    const results = [];
+
+    for (const role of roles) {
+      const existingRole = await Role.findOne({ name: role.name });
+      if (!existingRole) {
+        const savedRole = await Role.create(role);
+        results.push({
+          message: `Role ${role.name} created successfully`,
+          role: savedRole
+        });
+      } else {
+        results.push({
+          message: `Role ${role.name} already exists`,
+          role: existingRole
+        });
+      }
+    }
+
+    res.json({
+      message: 'Roles initialization completed',
+      results
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
 }; 

@@ -4,7 +4,8 @@ import {
   getAllRoles,
   getRoleById,
   updateRole,
-  deleteRole
+  deleteRole,
+  initializeDefaultRoles
 } from '../controllers/role.controller.js';
 import { authMiddleware } from '../middlewares/auth.middleware.js';
 
@@ -15,5 +16,6 @@ roleRoutes.get('/roles', authMiddleware, getAllRoles);
 roleRoutes.get('/roles/:id', authMiddleware, getRoleById);
 roleRoutes.put('/roles/:id', authMiddleware, updateRole);
 roleRoutes.delete('/roles/:id', authMiddleware, deleteRole);
+roleRoutes.post('/roles/initialize', authMiddleware, initializeDefaultRoles);
 
 export { roleRoutes }; 
