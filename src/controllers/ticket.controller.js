@@ -230,7 +230,35 @@ export const getTicketById = async (req, res) => {
       return res.status(403).json({ message: 'No tiene permiso para ver este ticket' });
     }
 
-    res.json(ticket);
+    // Obtener la categoría completa para acceder a las subcategorías
+    const fullCategory = await Category.findById(ticket.category._id);
+    
+    // Buscar la subcategoría correspondiente y su ID
+    const subcategoria = fullCategory.subcategorias.find(
+      sub => sub.nombre_subcategoria === ticket.subcategory.nombre_subcategoria
+    );
+
+    // Buscar el detalle de la subcategoría y su ID
+    const subcategoriaDetalle = subcategoria?.subcategorias_detalle.find(
+      det => det.nombre_subcategoria_detalle === ticket.subcategory.subcategoria_detalle.nombre_subcategoria_detalle
+    );
+
+    // Crear una copia del ticket para modificar la respuesta
+    const ticketResponse = ticket.toObject();
+
+    // Agregar los IDs a la respuesta
+    if (subcategoria) {
+      ticketResponse.subcategory = {
+        ...ticketResponse.subcategory,
+        _id: subcategoria._id,
+        subcategoria_detalle: {
+          ...ticketResponse.subcategory.subcategoria_detalle,
+          _id: subcategoriaDetalle?._id
+        }
+      };
+    }
+
+    res.json(ticketResponse);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
