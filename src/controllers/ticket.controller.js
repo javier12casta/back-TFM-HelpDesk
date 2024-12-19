@@ -272,12 +272,19 @@ export const updateTicket = async (req, res) => {
     }
 
     let changeType = 'UPDATED';
+    let notificationType = 'info';
+    let notificationTitle = 'Ticket Actualizado';
+    let notificationMessage = `El ticket ${previousTicket.ticketNumber} ha sido actualizado`;
+
     if (req.body.status && req.body.status !== previousTicket.status) {
       changeType = 'STATUS_CHANGE';
+      notificationMessage = `El estado del ticket ${previousTicket.ticketNumber} ha cambiado a ${req.body.status}`;
     } else if (req.body.priority && req.body.priority !== previousTicket.priority) {
       changeType = 'PRIORITY_CHANGE';
+      notificationMessage = `La prioridad del ticket ${previousTicket.ticketNumber} ha cambiado a ${req.body.priority}`;
     } else if (req.body.assignedTo && req.body.assignedTo !== previousTicket.assignedTo?.toString()) {
       changeType = 'ASSIGNMENT_CHANGE';
+      notificationMessage = `El ticket ${previousTicket.ticketNumber} ha sido reasignado`;
     }
 
     const updatedTicket = await Ticket.findByIdAndUpdate(
@@ -293,30 +300,76 @@ export const updateTicket = async (req, res) => {
     .populate('clientId', 'name email')
     .populate('assignedTo', 'name email');
 
-    // Notificar por Socket.IO
-    io.emit('ticketUpdated', {
-      ticket: updatedTicket,
-      message: `Ticket ${updatedTicket.ticketNumber} ha sido actualizado`
+    // Crear notificación para el creador del ticket
+    await createNotification(previousTicket.clientId, {
+      type: notificationType,
+      title: notificationTitle,
+      message: notificationMessage,
+      ticketId: updatedTicket._id
     });
 
-    // Si se cambió la asignación, enviar correo al nuevo agente
-    if (changeType === 'ASSIGNMENT_CHANGE' && updatedTicket.assignedTo) {
+    // Notificar por Socket.IO
+    io.to(userId).emit('ticketUpdated', {
+      ticket: updatedTicket,
+      message: notificationMessage
+    });
+
+    if (updatedTicket.assignedTo) {
+      await createNotification(updatedTicket.assignedTo._id, {
+        type: notificationType,
+        title: notificationTitle,
+        message: notificationMessage,
+        ticketId: updatedTicket._id
+      });
+      // Notificar al agente por Socket.IO
+      io.to(updatedTicket.assignedTo._id.toString()).emit('ticketUpdated', {
+        ticket: updatedTicket,
+        message: notificationMessage
+      });
+
+      // Enviar correo al agente
       const mailOptions = {
         from: process.env.EMAIL_USER,
         to: updatedTicket.assignedTo.email,
-        subject: 'Ticket Reasignado',
+        subject: notificationTitle,
         text: `
-          Se te ha asignado el ticket: ${updatedTicket.ticketNumber}
+          ${notificationMessage}
           Descripción: ${updatedTicket.description}
           Categoría: ${updatedTicket.category.nombre_categoria}
           Subcategoría: ${updatedTicket.subcategory.nombre_subcategoria}
           Detalle: ${updatedTicket.subcategory.subcategoria_detalle.nombre_subcategoria_detalle}
           Área: ${updatedTicket.area.area}
           Prioridad: ${updatedTicket.priority}
+          Estado: ${updatedTicket.status}
         `
       };
 
       await transporter.sendMail(mailOptions);
+    }
+
+    // Si el ticket fue reasignado, notificar al agente anterior
+    if (changeType === 'ASSIGNMENT_CHANGE' && previousTicket.assignedTo) {
+      await createNotification(previousTicket.assignedTo, {
+        type: 'warning',
+        title: 'Ticket Reasignado',
+        message: `El ticket ${updatedTicket.ticketNumber} ha sido asignado a otro agente`,
+        ticketId: updatedTicket._id
+      });
+      // Notificar al agente anterior por Socket.IO
+      io.to(previousTicket.assignedTo.toString()).emit('ticketReassigned', {
+        ticket: updatedTicket,
+        message: `El ticket ${updatedTicket.ticketNumber} ha sido asignado a otro agente`
+      });
+
+      // Enviar correo al agente anterior
+      const mailOptionsForPrevious = {
+        from: process.env.EMAIL_USER,
+        to: previousTicket.assignedTo.email,
+        subject: 'Ticket Reasignado',
+        text: `El ticket ${updatedTicket.ticketNumber} ha sido asignado a otro agente.`
+      };
+
+      await transporter.sendMail(mailOptionsForPrevious);
     }
 
     await logTicketChange(
@@ -339,7 +392,9 @@ export const deleteTicket = async (req, res) => {
     const userId = req.user.id;
     const userRole = req.user.role;
 
-    const ticket = await Ticket.findById(req.params.id);
+    const ticket = await Ticket.findById(req.params.id)
+      .populate('clientId', 'name email')
+      .populate('assignedTo', 'name email');
     
     if (!ticket) {
       return res.status(404).json({ message: 'Ticket no encontrado' });
@@ -347,6 +402,36 @@ export const deleteTicket = async (req, res) => {
 
     if (userRole !== 'admin') {
       return res.status(403).json({ message: 'No tiene permiso para eliminar tickets' });
+    }
+
+    // Crear notificación para el creador del ticket
+    await createNotification(ticket.clientId._id, {
+      type: 'warning',
+      title: 'Ticket Eliminado',
+      message: `El ticket ${ticket.ticketNumber} ha sido eliminado`,
+      ticketId: ticket._id
+    });
+
+    // Notificar al creador por Socket.IO
+    io.to(ticket.clientId._id.toString()).emit('ticketDeleted', {
+      ticket: ticket,
+      message: `El ticket ${ticket.ticketNumber} ha sido eliminado`
+    });
+
+    // Si había un agente asignado, notificarle también
+    if (ticket.assignedTo) {
+      await createNotification(ticket.assignedTo._id, {
+        type: 'warning',
+        title: 'Ticket Eliminado',
+        message: `El ticket ${ticket.ticketNumber} que tenías asignado ha sido eliminado`,
+        ticketId: ticket._id
+      });
+
+      // Notificar al agente por Socket.IO
+      io.to(ticket.assignedTo._id.toString()).emit('ticketDeleted', {
+        ticket: ticket,
+        message: `El ticket ${ticket.ticketNumber} que tenías asignado ha sido eliminado`
+      });
     }
 
     await Ticket.findByIdAndDelete(req.params.id);
@@ -422,24 +507,58 @@ export const assignTicket = async (req, res) => {
       return res.status(404).json({ message: 'Ticket no encontrado' });
     }
 
-    ticket.assignedTo = assignedTo; // Asignar el nuevo agente
+    const previousAssignee = ticket.assignedTo;
+    ticket.assignedTo = assignedTo;
     const updatedTicket = await ticket.save();
 
-    // Notificar a los involucrados mediante Socket.IO
-    io.emit('ticketAssigned', {
-      ticket: updatedTicket,
-      message: `Ticket ${updatedTicket.ticketNumber} ha sido asignado a ${assignedTo}`
+    // Notificar al nuevo agente asignado
+    await createNotification(assignedTo, {
+      type: 'info',
+      title: 'Nuevo Ticket Asignado',
+      message: `Se te ha asignado el ticket ${ticket.ticketNumber}`,
+      ticketId: ticket._id
     });
 
-    // Enviar correo electrónico al nuevo agente asignado
+    // Notificar al nuevo agente por Socket.IO
+    io.to(assignedTo).emit('ticketAssigned', {
+      ticket: updatedTicket,
+      message: `Se te ha asignado el ticket ${ticket.ticketNumber}`
+    });
+
+    // Enviar correo al nuevo agente
     const mailOptions = {
       from: process.env.EMAIL_USER,
-      to: assignedTo, // Correo del nuevo agente
-      subject: 'Ticket Asignado',
+      to: assignedTo,
+      subject: 'Nuevo Ticket Asignado',
       text: `Se te ha asignado un nuevo ticket: ${updatedTicket.ticketNumber}. Descripción: ${updatedTicket.description}`
     };
 
     await transporter.sendMail(mailOptions);
+
+    // Si había un agente anterior, notificarle
+    if (previousAssignee) {
+      await createNotification(previousAssignee, {
+        type: 'warning',
+        title: 'Ticket Reasignado',
+        message: `El ticket ${ticket.ticketNumber} ha sido asignado a otro agente`,
+        ticketId: ticket._id
+      });
+      // Notificar al agente anterior por Socket.IO
+      io.to(previousAssignee).emit('ticketReassigned', {
+        ticket: updatedTicket,
+        message: `El ticket ${ticket.ticketNumber} ha sido asignado a otro agente`
+      });
+
+      // Enviar correo al agente anterior
+      const mailOptionsForPrevious = {
+        from: process.env.EMAIL_USER,
+        to: previousAssignee.email,
+        subject: 'Ticket Reasignado',
+        text: `El ticket ${updatedTicket.ticketNumber} ha sido asignado a otro agente.`
+      };
+
+      await transporter.sendMail(mailOptionsForPrevious);
+    }
 
     res.json(updatedTicket);
   } catch (error) {
