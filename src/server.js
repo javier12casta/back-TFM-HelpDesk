@@ -14,7 +14,7 @@ import { swaggerSpec } from './config/swagger.config.js';
 import http from 'http';
 import { Server } from 'socket.io';
 import { notificationRoutes } from './routes/notification.routes.js';
-import { getUserStoredNotifications } from './controllers/notification.controller.js';
+import { getUserStoredNotifications, markNotificationAsRead } from './controllers/notification.controller.js';
 
 dotenv.config();
 
@@ -108,6 +108,27 @@ io.on('connection', async (socket) => {
             socket.emit('stored-notifications', storedNotifications);
         } catch (error) {
             console.error('Error al enviar notificaciones almacenadas:', error);
+        }
+    });
+
+    // Nuevo evento para marcar notificaciones como leídas
+    socket.on('markNotificationAsRead', async (data) => {
+        try {
+            const { notificationId, userId } = data;
+            const notification = await markNotificationAsRead(notificationId, userId);
+            
+            if (notification) {
+                // Emitir confirmación al usuario
+                io.to(userId).emit('notificationMarkedAsRead', {
+                    notificationId,
+                    message: 'Notificación marcada como leída'
+                });
+            }
+        } catch (error) {
+            console.error('Error al marcar notificación como leída:', error);
+            socket.emit('notificationError', {
+                message: 'Error al marcar la notificación como leída'
+            });
         }
     });
 

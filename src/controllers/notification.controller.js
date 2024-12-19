@@ -38,24 +38,25 @@ export const getUserNotifications = async (req, res) => {
   }
 };
 
-export const markNotificationAsRead = async (req, res) => {
+export const markNotificationAsRead = async (notificationId, userId) => {
   try {
     const notification = await Notification.findOneAndUpdate(
       { 
-        _id: req.params.id,
-        userId: req.user.id
+        _id: notificationId,
+        userId: userId
       },
       { read: true },
       { new: true }
     );
 
     if (!notification) {
-      return res.status(404).json({ message: 'Notificación no encontrada' });
+      throw new Error('Notificación no encontrada');
     }
 
-    res.json(notification);
+    return notification;
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('Error marking notification as read:', error);
+    throw error;
   }
 };
 
