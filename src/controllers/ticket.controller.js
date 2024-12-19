@@ -169,7 +169,7 @@ export const createTicket = async (req, res) => {
       .populate('assignedTo', 'name email');
 
     // Notificar a los administradores (si es necesario)
-    io.to('admin').emit('newTicket', {
+    io.to('admin').emit('ticketCreated', {
       ticket: populatedTicket,
       message: `Nuevo ticket creado: ${savedTicket.ticketNumber}`
     });
