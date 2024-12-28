@@ -719,3 +719,144 @@ export const assignTicket = async (req, res) => {
     res.status(400).json({ message: error.message });
   }
 };
+
+export const assignSupportUser = async (req, res) => {
+  try {
+    const { ticketId, supportUserId } = req.body;
+    const adminId = req.user.id;
+    
+    // Verificar si el usuario es admin o supervisor
+    const admin = await User.findById(adminId)
+      .populate('role', 'name');
+    
+    if (!admin || (admin.role.name !== 'admin' && admin.role.name !== 'supervisor')) {
+      return res.status(403).json({
+        success: false,
+        message: 'No tiene permisos para asignar tickets'
+      });
+    }
+
+    // Verificar que el ticket existe
+    const ticket = await Ticket.findById(ticketId)
+      .populate('clientId', 'email username')
+      .populate('area', 'area');
+      
+    if (!ticket) {
+      return res.status(404).json({
+        success: false,
+        message: 'Ticket no encontrado'
+      });
+    }
+
+    // Verificar que el usuario de soporte existe y tiene el rol correcto
+    const supportUser = await User.findById(supportUserId)
+      .populate('role', 'name');
+      
+    if (!supportUser || supportUser.role.name !== 'soporte') {
+      return res.status(400).json({
+        success: false,
+        message: 'Usuario de soporte no válido'
+      });
+    }
+
+    // Si es supervisor, verificar que el ticket pertenece a su área
+    if (admin.role.name === 'supervisor') {
+      if (!admin.area || ticket.area.toString() !== admin.area.toString()) {
+        return res.status(403).json({
+          success: false,
+          message: 'No tiene permisos para asignar tickets de otras áreas'
+        });
+      }
+    }
+
+    // Guardar el usuario anterior para notificaciones
+    const previousAssignee = ticket.assignedTo;
+
+    // Actualizar el ticket
+    ticket.assignedTo = supportUserId;
+    ticket.updatedAt = Date.now();
+    await ticket.save();
+
+    // Notificar al nuevo agente asignado
+    await createNotification(supportUserId, {
+      type: 'info',
+      title: 'Nuevo Ticket Asignado',
+      message: `Se te ha asignado el ticket ${ticket.ticketNumber}`,
+      ticketId: ticket._id
+    });
+
+    // Enviar correo al nuevo agente
+    const mailOptionsNewAgent = {
+      from: process.env.EMAIL_USER,
+      to: supportUser.email,
+      subject: 'Nuevo Ticket Asignado',
+      text: `
+        Hola ${supportUser.username},
+
+        Se te ha asignado un nuevo ticket:
+
+        Número de Ticket: ${ticket.ticketNumber}
+        Descripción: ${ticket.description}
+        Área: ${ticket.area.area}
+        Prioridad: ${ticket.priority}
+        Estado: ${ticket.status}
+
+        Por favor, revisa la plataforma para más detalles.
+
+        Saludos cordiales,
+        Equipo de Soporte
+      `
+    };
+
+    await transporter.sendMail(mailOptionsNewAgent);
+
+    // Si había un agente anterior, notificarle
+    if (previousAssignee) {
+      await createNotification(previousAssignee, {
+        type: 'warning',
+        title: 'Ticket Reasignado',
+        message: `El ticket ${ticket.ticketNumber} ha sido asignado a otro agente`,
+        ticketId: ticket._id
+      });
+
+      const previousAgent = await User.findById(previousAssignee);
+      if (previousAgent) {
+        const mailOptionsPrevious = {
+          from: process.env.EMAIL_USER,
+          to: previousAgent.email,
+          subject: 'Ticket Reasignado',
+          text: `El ticket ${ticket.ticketNumber} ha sido asignado a otro agente.`
+        };
+        await transporter.sendMail(mailOptionsPrevious);
+      }
+    }
+
+    // Registrar el cambio en el historial
+    await logTicketChange(
+      ticket._id,
+      adminId,
+      'ASSIGNMENT_CHANGE',
+      { assignedTo: previousAssignee },
+      { assignedTo: supportUserId },
+      req
+    );
+
+    // Notificar por Socket.IO
+    io.to(supportUserId).emit('ticketAssigned', {
+      ticket,
+      message: `Se te ha asignado el ticket ${ticket.ticketNumber}`
+    });
+
+    res.json({
+      success: true,
+      message: 'Ticket asignado correctamente',
+      ticket
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};

@@ -7,7 +7,8 @@ import {
   deleteTicket,
   getTicketsByCategory,
   getTicketHistory,
-  assignTicket
+  assignTicket,
+  assignSupportUser
 } from '../controllers/ticket.controller.js';
 import { validateTicket } from '../middlewares/validation.middleware.js';
 import { authMiddleware } from '../middlewares/auth.middleware.js';
@@ -216,5 +217,8 @@ ticketRoutes.get('/tickets/category/:category', authMiddleware, getTicketsByCate
 ticketRoutes.put('/tickets/:id', authMiddleware, validateTicket, updateTicket);
 ticketRoutes.delete('/tickets/:id', authMiddleware, deleteTicket);
 ticketRoutes.post('/tickets/assign', authMiddleware, assignTicket);
+
+// Ruta para asignar usuario de soporte
+ticketRoutes.post('/assign-support', authMiddleware, assignSupportUser);
 
 export { ticketRoutes }; 
