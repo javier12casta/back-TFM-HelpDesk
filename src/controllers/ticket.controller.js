@@ -290,8 +290,8 @@ export const getAllTickets = async (req, res) => {
 
     const tickets = await Ticket.find(query)
       .populate('category', 'nombre_categoria descripcion_categoria color_categoria')
-      .populate('clientId', 'name email')
-      .populate('assignedTo', 'name email')
+      .populate('clientId', 'name email username')
+      .populate('assignedTo', 'name email username')
       .populate('area', 'area');
 
     // Obtener todas las categorías para acceder a los colores de las subcategorías
@@ -344,8 +344,8 @@ export const getTicketById = async (req, res) => {
 
     const ticket = await Ticket.findById(req.params.id)
       .populate('category', 'nombre_categoria descripcion_categoria color_categoria')
-      .populate('clientId', 'name email')
-      .populate('assignedTo', 'name email')
+      .populate('clientId', 'name email username')
+      .populate('assignedTo', 'name email username')
       .populate('area', 'area');
 
     if (!ticket) {
@@ -740,8 +740,8 @@ export const assignSupportUser = async (req, res) => {
     const ticket = await Ticket.findById(ticketId)
       .populate('clientId', 'email username')
       .populate('area', 'area');
-      
-    if (!ticket) {
+
+      if (!ticket) {
       return res.status(404).json({
         success: false,
         message: 'Ticket no encontrado'

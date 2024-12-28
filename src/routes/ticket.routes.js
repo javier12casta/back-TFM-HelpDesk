@@ -219,6 +219,6 @@ ticketRoutes.delete('/tickets/:id', authMiddleware, deleteTicket);
 ticketRoutes.post('/tickets/assign', authMiddleware, assignTicket);
 
 // Ruta para asignar usuario de soporte
-ticketRoutes.post('/assign-support', authMiddleware, assignSupportUser);
+ticketRoutes.post('/tickets/support-assign', authMiddleware, assignSupportUser);
 
 export { ticketRoutes }; 
