@@ -7,6 +7,9 @@ import { io } from '../server.js';
 import { createNotification } from './notification.controller.js';
 import Role from '../models/role.model.js';
 import User from '../models/user.model.js';
+import Comment from '../models/comment.model.js';
+import multer from 'multer';
+import path from 'path';
 
 // Función auxiliar para registrar cambios
 const logTicketChange = async (ticketId, userId, changeType, previousData, currentData, req) => {
@@ -115,6 +118,155 @@ const isUserAdmin = async (roleId) => {
   } catch (error) {
     console.error('Error al verificar rol:', error);
     return false;
+  }
+};
+
+// Configuración de multer para subida de archivos
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, 'uploads/ticket-attachments/');
+  },
+  filename: function (req, file, cb) {
+    cb(null, Date.now() + '-' + file.originalname);
+  }
+});
+
+const upload = multer({ 
+  storage: storage,
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB límite
+  }
+}).single('attachment');
+
+// Agregar comentario a un ticket
+export const addComment = async (req, res) => {
+  try {
+    upload(req, res, async function(err) {
+      if (err instanceof multer.MulterError) {
+        return res.status(400).json({ message: 'Error al subir archivo: ' + err.message });
+      } else if (err) {
+        return res.status(500).json({ message: 'Error al procesar archivo' });
+      }
+
+      const { ticketId } = req.params;
+      const { text, newStatus } = req.body;
+      const userId = req.user.id;
+
+      // Verificar que el ticket existe
+      const ticket = await Ticket.findById(ticketId);
+      if (!ticket) {
+        return res.status(404).json({ message: 'Ticket no encontrado' });
+      }
+
+      // Crear el comentario
+      const comment = new Comment({
+        ticketId,
+        userId,
+        text,
+        attachment: req.file ? {
+          filename: req.file.originalname,
+          path: req.file.path,
+          mimetype: req.file.mimetype
+        } : undefined
+      });
+
+      // Si hay cambio de estado
+      if (newStatus && newStatus !== ticket.status) {
+        comment.statusChange = {
+          oldStatus: ticket.status,
+          newStatus: newStatus
+        };
+        
+        // Actualizar estado del ticket
+        ticket.status = newStatus;
+        await ticket.save();
+
+        // Notificar cambio de estado
+        await createNotification(ticket.clientId, {
+          type: 'info',
+          title: 'Estado de Ticket Actualizado',
+          message: `El estado del ticket ${ticket.ticketNumber} ha cambiado a ${newStatus}`,
+          ticketId: ticket._id
+        });
+      }
+
+      await comment.save();
+
+      // Poblar la información del usuario
+      const populatedComment = await Comment.findById(comment._id)
+        .populate('userId', 'username name email');
+
+      // Notificar a los involucrados
+      const notifyUsers = new Set([
+        ticket.clientId.toString(),
+        ticket.assignedTo?.toString()
+      ].filter(Boolean));
+
+      notifyUsers.forEach(async (userId) => {
+        if (userId !== req.user.id) {
+          await createNotification(userId, {
+            type: 'info',
+            title: 'Nuevo Comentario en Ticket',
+            message: `Se ha agregado un nuevo comentario al ticket ${ticket.ticketNumber}`,
+            ticketId: ticket._id
+          });
+        }
+      });
+
+      // Notificar por Socket.IO
+      notifyUsers.forEach((userId) => {
+        io.to(userId).emit('newComment', {
+          ticket: ticket,
+          comment: populatedComment
+        });
+      });
+
+      res.status(201).json({
+        success: true,
+        data: populatedComment
+      });
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Obtener comentarios de un ticket
+export const getTicketComments = async (req, res) => {
+  try {
+    const { ticketId } = req.params;
+    const userId = req.user.id;
+
+    // Verificar acceso al ticket
+    const ticket = await Ticket.findById(ticketId);
+    if (!ticket) {
+      return res.status(404).json({ message: 'Ticket no encontrado' });
+    }
+
+    // Verificar permisos
+    const user = await User.findById(userId).populate('role', 'name');
+    const isAdmin = user.role.name === 'admin';
+    const isSupervisor = user.role.name === 'supervisor';
+    const isSupport = user.role.name === 'soporte';
+
+    if (!isAdmin && 
+        ticket.clientId.toString() !== userId && 
+        ticket.assignedTo?.toString() !== userId &&
+        !(isSupervisor && user.area && ticket.area.toString() === user.area.toString())) {
+      return res.status(403).json({ message: 'No tiene permiso para ver estos comentarios' });
+    }
+
+    // Obtener comentarios
+    const comments = await Comment.find({ ticketId })
+      .populate('userId', 'username name email')
+      .sort({ createdAt: 'asc' });
+
+    res.json({
+      success: true,
+      data: comments
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
 };
 
@@ -866,6 +1018,167 @@ export const assignSupportUser = async (req, res) => {
     res.json({
       success: true,
       message: 'Ticket asignado correctamente',
+      ticket
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+export const changeTicketStatus = async (req, res) => {
+  try {
+    const { ticketId } = req.params;
+    const { newStatus, commentText } = req.body;
+    const userId = req.user.id;
+
+    // Verificar permisos del usuario
+    const user = await User.findById(userId).populate('role', 'name');
+    const isAdmin = user.role.name === 'admin';
+    const isSupervisor = user.role.name === 'supervisor';
+    const isSupport = user.role.name === 'soporte';
+
+    // Obtener el ticket
+    const ticket = await Ticket.findById(ticketId)
+      .populate('clientId', 'email username')
+      .populate('assignedTo', 'email username')
+      .populate('area', 'area');
+
+    if (!ticket) {
+      return res.status(404).json({
+        success: false,
+        message: 'Ticket no encontrado'
+      });
+    }
+
+    // Verificar permisos para cambiar el estado
+    if (!isAdmin && 
+        !isSupervisor && 
+        !isSupport && 
+        ticket.assignedTo?._id.toString() !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: 'No tiene permisos para cambiar el estado del ticket'
+      });
+    }
+
+    // Si es supervisor, verificar que el ticket pertenece a su área
+    if (isSupervisor && (!user.area || ticket.area.toString() !== user.area.toString())) {
+      return res.status(403).json({
+        success: false,
+        message: 'No tiene permisos para modificar tickets de otras áreas'
+      });
+    }
+
+    const oldStatus = ticket.status;
+    ticket.status = newStatus;
+    ticket.updatedAt = Date.now();
+
+    // Crear un comentario si se proporcionó texto
+    if (commentText) {
+      const comment = new Comment({
+        ticketId,
+        userId,
+        text: commentText,
+        statusChange: {
+          oldStatus,
+          newStatus
+        }
+      });
+      await comment.save();
+    }
+
+    await ticket.save();
+
+    // Notificar al cliente
+    await createNotification(ticket.clientId._id, {
+      type: 'info',
+      title: 'Estado de Ticket Actualizado',
+      message: `El estado de tu ticket ${ticket.ticketNumber} ha cambiado a ${newStatus}`,
+      ticketId: ticket._id
+    });
+
+    // Enviar correo al cliente
+    const mailOptionsClient = {
+      from: process.env.EMAIL_USER,
+      to: ticket.clientId.email,
+      subject: 'Estado de Ticket Actualizado',
+      text: `
+        Hola ${ticket.clientId.username},
+
+        El estado de tu ticket ha sido actualizado:
+
+        Número de Ticket: ${ticket.ticketNumber}
+        Estado anterior: ${oldStatus}
+        Nuevo estado: ${newStatus}
+        ${commentText ? `\nComentario: ${commentText}` : ''}
+
+        Puedes revisar los detalles en la plataforma.
+
+        Saludos cordiales,
+        Equipo de Soporte
+      `
+    };
+
+    await transporter.sendMail(mailOptionsClient);
+
+    // Si hay un agente asignado diferente al que hace el cambio, notificarle
+    if (ticket.assignedTo && ticket.assignedTo._id.toString() !== userId) {
+      await createNotification(ticket.assignedTo._id, {
+        type: 'info',
+        title: 'Estado de Ticket Actualizado',
+        message: `El estado del ticket ${ticket.ticketNumber} ha cambiado a ${newStatus}`,
+        ticketId: ticket._id
+      });
+
+      const mailOptionsAgent = {
+        from: process.env.EMAIL_USER,
+        to: ticket.assignedTo.email,
+        subject: 'Estado de Ticket Actualizado',
+        text: `
+          Hola ${ticket.assignedTo.username},
+
+          El estado del ticket que tienes asignado ha sido actualizado:
+
+          Número de Ticket: ${ticket.ticketNumber}
+          Estado anterior: ${oldStatus}
+          Nuevo estado: ${newStatus}
+          ${commentText ? `\nComentario: ${commentText}` : ''}
+
+          Por favor, revisa la plataforma para más detalles.
+
+          Saludos cordiales,
+          Equipo de Soporte
+        `
+      };
+
+      await transporter.sendMail(mailOptionsAgent);
+    }
+
+    // Registrar el cambio en el historial
+    await logTicketChange(
+      ticket._id,
+      userId,
+      'STATUS_CHANGE',
+      { status: oldStatus },
+      { status: newStatus },
+      req
+    );
+
+    // Notificar por Socket.IO
+    io.to(ticket.clientId._id.toString()).emit('ticketStatusChanged', {
+      ticket,
+      oldStatus,
+      newStatus,
+      message: `El estado del ticket ${ticket.ticketNumber} ha cambiado a ${newStatus}`
+    });
+
+    res.json({
+      success: true,
+      message: 'Estado del ticket actualizado correctamente',
       ticket
     });
 
