@@ -62,6 +62,11 @@ const ticketSchema = new mongoose.Schema({
   updatedAt: {
     type: Date,
     default: Date.now
+  },
+  attachment: {
+    filename: String,
+    path: String,
+    mimetype: String
   }
 });
 

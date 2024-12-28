@@ -65,9 +65,34 @@ const ticketRoutes = express.Router();
  *     requestBody:
  *       required: true
  *       content:
- *         application/json:
+ *         multipart/form-data:
  *           schema:
- *             $ref: '#/components/schemas/Ticket'
+ *             type: object
+ *             required:
+ *               - description
+ *               - categoryId
+ *               - subcategory
+ *               - priority
+ *             properties:
+ *               description:
+ *                 type: string
+ *                 description: Descripción del problema
+ *               categoryId:
+ *                 type: string
+ *                 description: ID de la categoría
+ *               subcategory:
+ *                 type: object
+ *                 description: Información de la subcategoría
+ *               priority:
+ *                 type: string
+ *                 enum: ['Baja', 'Media', 'Alta']
+ *               assignedTo:
+ *                 type: string
+ *                 description: ID del agente asignado (opcional)
+ *               attachment:
+ *                 type: string
+ *                 format: binary
+ *                 description: Archivo adjunto (opcional)
  *     responses:
  *       201:
  *         description: Ticket creado exitosamente
@@ -160,14 +185,36 @@ ticketRoutes.get('/tickets/:id/history', authMiddleware, getTicketHistory);
  *     requestBody:
  *       required: true
  *       content:
- *         application/json:
+ *         multipart/form-data:
  *           schema:
- *             $ref: '#/components/schemas/Ticket'
+ *             type: object
+ *             properties:
+ *               description:
+ *                 type: string
+ *                 description: Descripción del problema
+ *               categoryId:
+ *                 type: string
+ *                 description: ID de la categoría
+ *               subcategory:
+ *                 type: object
+ *                 description: Información de la subcategoría
+ *               priority:
+ *                 type: string
+ *                 enum: ['Baja', 'Media', 'Alta']
+ *               assignedTo:
+ *                 type: string
+ *                 description: ID del agente asignado
+ *               attachment:
+ *                 type: string
+ *                 format: binary
+ *                 description: Nuevo archivo adjunto (solo permitido en estado pendiente)
  *     responses:
  *       200:
  *         description: Ticket actualizado exitosamente
  *       400:
- *         description: Datos inválidos
+ *         description: Datos inválidos o ticket no está en estado pendiente
+ *       403:
+ *         description: No tiene permisos para actualizar este ticket
  *       404:
  *         description: Ticket no encontrado
  */

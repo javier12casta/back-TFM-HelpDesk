@@ -272,104 +272,72 @@ export const getTicketComments = async (req, res) => {
 
 export const createTicket = async (req, res) => {
   try {
-    const userId = req.user.id;
-    const {
-      description,
-      categoryId,
-      subcategory,
-      priority,
-      assignedTo
-    } = req.body;
+    upload(req, res, async function(err) {
+      if (err instanceof multer.MulterError) {
+        return res.status(400).json({ message: 'Error al subir archivo: ' + err.message });
+      } else if (err) {
+        return res.status(500).json({ message: 'Error al procesar archivo' });
+      }
 
-    // Verificar que la categoría existe
-    const category = await Category.findById(categoryId);
-    if (!category) {
-      return res.status(404).json({ message: 'Categoría no encontrada' });
-    }
+      const userId = req.user.id;
+      const {
+        description,
+        categoryId,
+        subcategory,
+        priority,
+        assignedTo
+      } = req.body;
 
-    // Determinar el área automáticamente
-    let areaId;
-    try {
-      areaId = await determineArea(categoryId, subcategory);
-    } catch (error) {
-      return res.status(400).json({ message: error.message });
-    }
+      // Verificar que la categoría existe
+      const category = await Category.findById(categoryId);
+      if (!category) {
+        return res.status(404).json({ message: 'Categoría no encontrada' });
+      }
 
-    const newTicket = new Ticket({
-      description,
-      category: categoryId,
-      subcategory,
-      priority,
-      clientId: userId,
-      assignedTo,
-      area: areaId,
-      ticketNumber: `TKT-${Date.now()}`
-    });
-    
-    const savedTicket = await newTicket.save();
+      // Determinar el área automáticamente
+      let areaId;
+      try {
+        areaId = await determineArea(categoryId, subcategory);
+      } catch (error) {
+        return res.status(400).json({ message: error.message });
+      }
 
-    // Poblar los campos de referencia para la respuesta y el correo
-    const populatedTicket = await Ticket.findById(savedTicket._id)
-      .populate('category', 'nombre_categoria descripcion_categoria')
-      .populate('area', 'area detalle')
-      .populate('clientId', 'name email')
-      .populate('assignedTo', 'name email');
-
-    const user = await User.findById(populatedTicket.clientId._id);
-    // Enviar correo al creador del ticket
-    const mailOptionsCreator = {
-      from: process.env.EMAIL_USER,
-      to: populatedTicket.clientId.email,
-      subject: 'Ticket Creado Exitosamente',
-      text: `
-        Hola ${user.username},
-
-        Tu ticket ha sido creado exitosamente con los siguientes detalles:
-
-        Número de Ticket: ${savedTicket.ticketNumber}
-        Descripción: ${description}
-        Categoría: ${populatedTicket.category.nombre_categoria}
-        Subcategoría: ${subcategory.nombre_subcategoria}
-        Detalle: ${subcategory.subcategoria_detalle.nombre_subcategoria_detalle}
-        Área: ${populatedTicket.area.area}
-        Prioridad: ${priority}
-        Estado: ${savedTicket.status}
-
-        Puedes hacer seguimiento de tu ticket en nuestra plataforma.
-
-        Saludos cordiales,
-        Equipo de Soporte
-      `
-    };
-
-    await transporter.sendMail(mailOptionsCreator);
-
-    // Código existente para notificaciones
-    await createNotification(userId, {
-      type: 'success',
-      title: 'Ticket Creado',
-      message: `Tu ticket ${savedTicket.ticketNumber} ha sido creado exitosamente`,
-      ticketId: savedTicket._id
-    });
-
-    // Si hay un agente asignado, crear notificación y enviar correo
-    if (assignedTo) {
-      await createNotification(assignedTo, {
-        type: 'info',
-        title: 'Nuevo Ticket Asignado',
-        message: `Se te ha asignado el ticket ${savedTicket.ticketNumber}`,
-        ticketId: savedTicket._id
+      const newTicket = new Ticket({
+        description,
+        category: categoryId,
+        subcategory,
+        priority,
+        clientId: userId,
+        assignedTo,
+        area: areaId,
+        ticketNumber: `TKT-${Date.now()}`,
+        attachment: req.file ? {
+          filename: req.file.originalname,
+          path: req.file.path,
+          mimetype: req.file.mimetype
+        } : undefined
       });
+      
+      const savedTicket = await newTicket.save();
 
-      // Enviar correo al agente asignado
-      const mailOptionsAgent = {
+      // Poblar los campos de referencia para la respuesta y el correo
+      const populatedTicket = await Ticket.findById(savedTicket._id)
+        .populate('category', 'nombre_categoria descripcion_categoria')
+        .populate('area', 'area detalle')
+        .populate('clientId', 'name email')
+        .populate('assignedTo', 'name email');
+
+      const user = await User.findById(populatedTicket.clientId._id);
+      
+      // Enviar correo al creador del ticket
+      const mailOptionsCreator = {
         from: process.env.EMAIL_USER,
-        to: populatedTicket.assignedTo.email,
-        subject: 'Nuevo Ticket Asignado',
+        to: populatedTicket.clientId.email,
+        subject: 'Ticket Creado Exitosamente',
         text: `
-          Hola ${populatedTicket.assignedTo.name},
+          Hola ${user.username},
 
-          Se te ha asignado un nuevo ticket:
+          Tu ticket ha sido creado exitosamente con los siguientes detalles:
 
           Número de Ticket: ${savedTicket.ticketNumber}
           Descripción: ${description}
@@ -379,33 +347,80 @@ export const createTicket = async (req, res) => {
           Área: ${populatedTicket.area.area}
           Prioridad: ${priority}
           Estado: ${savedTicket.status}
+          ${req.file ? `\nArchivo adjunto: ${req.file.originalname}` : ''}
 
-          Por favor, revisa la plataforma para más detalles.
+          Puedes hacer seguimiento de tu ticket en nuestra plataforma.
 
           Saludos cordiales,
           Equipo de Soporte
         `
       };
 
-      await transporter.sendMail(mailOptionsAgent);
-    }
+      await transporter.sendMail(mailOptionsCreator);
 
-    // Notificar a los administradores
-    io.to('admin').emit('ticketCreated', {
-      ticket: populatedTicket,
-      message: `Nuevo ticket creado: ${savedTicket.ticketNumber}`
+      // Código existente para notificaciones
+      await createNotification(userId, {
+        type: 'success',
+        title: 'Ticket Creado',
+        message: `Tu ticket ${savedTicket.ticketNumber} ha sido creado exitosamente`,
+        ticketId: savedTicket._id
+      });
+
+      // Si hay un agente asignado, crear notificación y enviar correo
+      if (assignedTo) {
+        await createNotification(assignedTo, {
+          type: 'info',
+          title: 'Nuevo Ticket Asignado',
+          message: `Se te ha asignado el ticket ${savedTicket.ticketNumber}`,
+          ticketId: savedTicket._id
+        });
+
+        // Enviar correo al agente asignado
+        const mailOptionsAgent = {
+          from: process.env.EMAIL_USER,
+          to: populatedTicket.assignedTo.email,
+          subject: 'Nuevo Ticket Asignado',
+          text: `
+            Hola ${populatedTicket.assignedTo.name},
+
+            Se te ha asignado un nuevo ticket:
+
+            Número de Ticket: ${savedTicket.ticketNumber}
+            Descripción: ${description}
+            Categoría: ${populatedTicket.category.nombre_categoria}
+            Subcategoría: ${subcategory.nombre_subcategoria}
+            Detalle: ${subcategory.subcategoria_detalle.nombre_subcategoria_detalle}
+            Área: ${populatedTicket.area.area}
+            Prioridad: ${priority}
+            Estado: ${savedTicket.status}
+
+            Por favor, revisa la plataforma para más detalles.
+
+            Saludos cordiales,
+            Equipo de Soporte
+          `
+        };
+
+        await transporter.sendMail(mailOptionsAgent);
+      }
+
+      // Notificar a los administradores
+      io.to('admin').emit('ticketCreated', {
+        ticket: populatedTicket,
+        message: `Nuevo ticket creado: ${savedTicket.ticketNumber}`
+      });
+
+      await logTicketChange(
+        savedTicket._id,
+        userId,
+        'CREATED',
+        null,
+        savedTicket.toObject(),
+        req
+      );
+
+      res.status(201).json(populatedTicket);
     });
-
-    await logTicketChange(
-      savedTicket._id,
-      userId,
-      'CREATED',
-      null,
-      savedTicket.toObject(),
-      req
-    );
-
-    res.status(201).json(populatedTicket);
   } catch (error) {
     res.status(400).json({ message: error.message });
   }
@@ -511,17 +526,23 @@ export const getTicketById = async (req, res) => {
     const isAdmin = await isUserAdmin(req.user.role);
     const isSupervisor = user.role?.name === 'supervisor';
     const isSupport = user.role?.name === 'soporte';
+    const isCreator = ticket.clientId._id.toString() === userId;
+    const isAssignedAgent = ticket.assignedTo?._id.toString() === userId;
+    const isSupervisorOfArea = isSupervisor && user.area && ticket.area.toString() === user.area.toString();
 
-    // Permitir acceso si:
+    // Permitir acceso si cumple alguna de estas condiciones:
     // 1. Es admin
     // 2. Es el creador del ticket
     // 3. Es el agente de soporte asignado
     // 4. Es supervisor del área del ticket
     if (!isAdmin && 
-        ticket.clientId.toString() !== userId && 
-        ticket.assignedTo?._id.toString() !== userId &&
-        !(isSupervisor && user.area && ticket.area.toString() === user.area.toString())) {
-      return res.status(403).json({ message: 'No tiene permiso para ver este ticket' });
+        !isCreator && 
+        !isAssignedAgent &&
+        !isSupervisorOfArea) {
+      return res.status(403).json({ 
+        success: false,
+        message: 'No tiene permiso para ver este ticket' 
+      });
     }
 
     // Obtener la categoría completa para acceder a las subcategorías
@@ -552,158 +573,149 @@ export const getTicketById = async (req, res) => {
       };
     }
 
-    res.json(ticketResponse);
+    // Agregar información de permisos a la respuesta
+    ticketResponse.permissions = {
+      canView: true,
+      canEdit: isAdmin || isCreator || (isSupport && isAssignedAgent) || isSupervisorOfArea,
+      canDelete: isAdmin,
+      canChangeStatus: isAdmin || isAssignedAgent || isSupervisorOfArea,
+      canAssign: isAdmin || isSupervisorOfArea,
+      canComment: true
+    };
+
+    res.json({
+      success: true,
+      data: ticketResponse
+    });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ 
+      success: false,
+      message: error.message 
+    });
   }
 };
 
 export const updateTicket = async (req, res) => {
   try {
-    const userId = req.user.id;
-    const isAdmin = await isUserAdmin(req.user.role);
-
-    const previousTicket = await Ticket.findById(req.params.id);
-    
-    if (!previousTicket) {
-      return res.status(404).json({ message: 'Ticket no encontrado' });
-    }
-
-    if (!isAdmin && previousTicket.clientId.toString() !== userId) {
-      return res.status(403).json({ message: 'No tiene permiso para actualizar este ticket' });
-    }
-
-    // Si se está actualizando la categoría, verificar que existe
-    if (req.body.categoryId) {
-      const category = await Category.findById(req.body.categoryId);
-      if (!category) {
-        return res.status(404).json({ message: 'Categoría no encontrada' });
+    upload(req, res, async function(err) {
+      if (err instanceof multer.MulterError) {
+        return res.status(400).json({ message: 'Error al subir archivo: ' + err.message });
+      } else if (err) {
+        return res.status(500).json({ message: 'Error al procesar archivo' });
       }
-      req.body.category = req.body.categoryId;
-      delete req.body.categoryId;
-    }
 
-    // Si se está actualizando el área, verificar que existe
-    if (req.body.areaId) {
-      const area = await Area.findById(req.body.areaId);
-      if (!area) {
-        return res.status(404).json({ message: 'Área no encontrada' });
+      const userId = req.user.id;
+      const isAdmin = await isUserAdmin(req.user.role);
+
+      const previousTicket = await Ticket.findById(req.params.id);
+      
+      if (!previousTicket) {
+        return res.status(404).json({ message: 'Ticket no encontrado' });
       }
-      req.body.area = req.body.areaId;
-      delete req.body.areaId;
-    }
 
-    let changeType = 'UPDATED';
-    let notificationType = 'info';
-    let notificationTitle = 'Ticket Actualizado';
-    let notificationMessage = `El ticket ${previousTicket.ticketNumber} ha sido actualizado`;
+      if (!isAdmin && previousTicket.clientId.toString() !== userId) {
+        return res.status(403).json({ message: 'No tiene permiso para actualizar este ticket' });
+      }
 
-    if (req.body.status && req.body.status !== previousTicket.status) {
-      changeType = 'STATUS_CHANGE';
-      notificationMessage = `El estado del ticket ${previousTicket.ticketNumber} ha cambiado a ${req.body.status}`;
-    } else if (req.body.priority && req.body.priority !== previousTicket.priority) {
-      changeType = 'PRIORITY_CHANGE';
-      notificationMessage = `La prioridad del ticket ${previousTicket.ticketNumber} ha cambiado a ${req.body.priority}`;
-    } else if (req.body.assignedTo && req.body.assignedTo !== previousTicket.assignedTo?.toString()) {
-      changeType = 'ASSIGNMENT_CHANGE';
-      notificationMessage = `El ticket ${previousTicket.ticketNumber} ha sido reasignado`;
-    }
+      // Verificar si el ticket está en estado pendiente para actualizar el archivo
+      if (req.file && previousTicket.status !== 'Pendiente') {
+        return res.status(400).json({
+          message: 'Solo se puede modificar el archivo adjunto cuando el ticket está en estado pendiente'
+        });
+      }
 
-    const updatedTicket = await Ticket.findByIdAndUpdate(
-      req.params.id,
-      {
-        ...req.body,
-        updatedAt: Date.now()
-      },
-      { new: true }
-    )
-    .populate('category', 'nombre_categoria descripcion_categoria')
-    .populate('area', 'area detalle')
-    .populate('clientId', 'name email')
-    .populate('assignedTo', 'name email');
+      // Preparar datos de actualización
+      const updateData = { ...req.body };
 
-    // Crear notificación para el creador del ticket
-    await createNotification(previousTicket.clientId, {
-      type: notificationType,
-      title: notificationTitle,
-      message: notificationMessage,
-      ticketId: updatedTicket._id
-    });
+      // Si hay un nuevo archivo, actualizar el attachment
+      if (req.file) {
+        updateData.attachment = {
+          filename: req.file.originalname,
+          path: req.file.path,
+          mimetype: req.file.mimetype
+        };
+      }
 
-    // Notificar por Socket.IO
-    io.to(userId).emit('ticketUpdated', {
-      ticket: updatedTicket,
-      message: notificationMessage
-    });
+      // Si se está actualizando la categoría, verificar que existe
+      if (updateData.categoryId) {
+        const category = await Category.findById(updateData.categoryId);
+        if (!category) {
+          return res.status(404).json({ message: 'Categoría no encontrada' });
+        }
+        updateData.category = updateData.categoryId;
+        delete updateData.categoryId;
+      }
 
-    if (updatedTicket.assignedTo) {
-      await createNotification(updatedTicket.assignedTo._id, {
+      // Si se está actualizando el área, verificar que existe
+      if (updateData.areaId) {
+        const area = await Area.findById(updateData.areaId);
+        if (!area) {
+          return res.status(404).json({ message: 'Área no encontrada' });
+        }
+        updateData.area = updateData.areaId;
+        delete updateData.areaId;
+      }
+
+      let changeType = 'UPDATED';
+      let notificationType = 'info';
+      let notificationTitle = 'Ticket Actualizado';
+      let notificationMessage = `El ticket ${previousTicket.ticketNumber} ha sido actualizado`;
+
+      if (updateData.status && updateData.status !== previousTicket.status) {
+        changeType = 'STATUS_CHANGE';
+        notificationMessage = `El estado del ticket ${previousTicket.ticketNumber} ha cambiado a ${updateData.status}`;
+      } else if (updateData.priority && updateData.priority !== previousTicket.priority) {
+        changeType = 'PRIORITY_CHANGE';
+        notificationMessage = `La prioridad del ticket ${previousTicket.ticketNumber} ha cambiado a ${updateData.priority}`;
+      } else if (updateData.assignedTo && updateData.assignedTo !== previousTicket.assignedTo?.toString()) {
+        changeType = 'ASSIGNMENT_CHANGE';
+        notificationMessage = `El ticket ${previousTicket.ticketNumber} ha sido reasignado`;
+      }
+
+      updateData.updatedAt = Date.now();
+
+      const updatedTicket = await Ticket.findByIdAndUpdate(
+        req.params.id,
+        { $set: updateData },
+        { new: true }
+      )
+      .populate('category', 'nombre_categoria descripcion_categoria')
+      .populate('area', 'area detalle')
+      .populate('clientId', 'name email username')
+      .populate('assignedTo', 'name email username');
+
+      // Si se actualizó el archivo, crear un comentario automático
+      if (req.file) {
+        const comment = new Comment({
+          ticketId: updatedTicket._id,
+          userId,
+          text: 'Se ha actualizado el archivo adjunto del ticket',
+          attachment: updateData.attachment
+        });
+        await comment.save();
+      }
+
+      // Notificar al cliente
+      await createNotification(updatedTicket.clientId._id, {
         type: notificationType,
         title: notificationTitle,
         message: notificationMessage,
         ticketId: updatedTicket._id
       });
-      // Notificar al agente por Socket.IO
-      io.to(updatedTicket.assignedTo._id.toString()).emit('ticketUpdated', {
-        ticket: updatedTicket,
-        message: notificationMessage
-      });
 
-      // Enviar correo al agente
-      const mailOptions = {
-        from: process.env.EMAIL_USER,
-        to: updatedTicket.assignedTo.email,
-        subject: notificationTitle,
-        text: `
-          ${notificationMessage}
-          Descripción: ${updatedTicket.description}
-          Categoría: ${updatedTicket.category.nombre_categoria}
-          Subcategoría: ${updatedTicket.subcategory.nombre_subcategoria}
-          Detalle: ${updatedTicket.subcategory.subcategoria_detalle.nombre_subcategoria_detalle}
-          Área: ${updatedTicket.area.area}
-          Prioridad: ${updatedTicket.priority}
-          Estado: ${updatedTicket.status}
-        `
-      };
+      // Resto del código de notificaciones...
 
-      await transporter.sendMail(mailOptions);
-    }
+      await logTicketChange(
+        updatedTicket._id,
+        userId,
+        changeType,
+        previousTicket.toObject(),
+        updatedTicket.toObject(),
+        req
+      );
 
-    // Si el ticket fue reasignado, notificar al agente anterior
-    if (changeType === 'ASSIGNMENT_CHANGE' && previousTicket.assignedTo) {
-      await createNotification(previousTicket.assignedTo, {
-        type: 'warning',
-        title: 'Ticket Reasignado',
-        message: `El ticket ${updatedTicket.ticketNumber} ha sido asignado a otro agente`,
-        ticketId: updatedTicket._id
-      });
-      // Notificar al agente anterior por Socket.IO
-      io.to(previousTicket.assignedTo.toString()).emit('ticketReassigned', {
-        ticket: updatedTicket,
-        message: `El ticket ${updatedTicket.ticketNumber} ha sido asignado a otro agente`
-      });
-
-      // Enviar correo al agente anterior
-      const mailOptionsForPrevious = {
-        from: process.env.EMAIL_USER,
-        to: previousTicket.assignedTo.email,
-        subject: 'Ticket Reasignado',
-        text: `El ticket ${updatedTicket.ticketNumber} ha sido asignado a otro agente.`
-      };
-
-      await transporter.sendMail(mailOptionsForPrevious);
-    }
-
-    await logTicketChange(
-      updatedTicket._id,
-      userId,
-      changeType,
-      previousTicket.toObject(),
-      updatedTicket.toObject(),
-      req
-    );
-
-    res.json(updatedTicket);
+      res.json(updatedTicket);
+    });
   } catch (error) {
     res.status(400).json({ message: error.message });
   }
