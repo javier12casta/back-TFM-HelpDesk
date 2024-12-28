@@ -340,7 +340,10 @@ export const getAllTickets = async (req, res) => {
 export const getTicketById = async (req, res) => {
   try {
     const userId = req.user.id;
-    const isAdmin = await isUserAdmin(req.user.role);
+    
+    // Obtener el usuario con su rol
+    const user = await User.findById(userId)
+      .populate('role', 'name');
 
     const ticket = await Ticket.findById(req.params.id)
       .populate('category', 'nombre_categoria descripcion_categoria color_categoria')
@@ -352,7 +355,20 @@ export const getTicketById = async (req, res) => {
       return res.status(404).json({ message: 'Ticket no encontrado' });
     }
 
-    if (!isAdmin && ticket.clientId.toString() !== userId) {
+    // Verificar permisos según el rol
+    const isAdmin = await isUserAdmin(req.user.role);
+    const isSupervisor = user.role?.name === 'supervisor';
+    const isSupport = user.role?.name === 'soporte';
+
+    // Permitir acceso si:
+    // 1. Es admin
+    // 2. Es el creador del ticket
+    // 3. Es el agente de soporte asignado
+    // 4. Es supervisor del área del ticket
+    if (!isAdmin && 
+        ticket.clientId.toString() !== userId && 
+        ticket.assignedTo?._id.toString() !== userId &&
+        !(isSupervisor && user.area && ticket.area.toString() === user.area.toString())) {
       return res.status(403).json({ message: 'No tiene permiso para ver este ticket' });
     }
 
