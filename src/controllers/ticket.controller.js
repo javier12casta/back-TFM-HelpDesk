@@ -5,6 +5,7 @@ import Area from '../models/area.model.js';
 import transporter from '../config/nodemailer.config.js';
 import { io } from '../server.js';
 import { createNotification } from './notification.controller.js';
+import Role from '../models/role.model.js';
 
 // Función auxiliar para registrar cambios
 const logTicketChange = async (ticketId, userId, changeType, previousData, currentData, req) => {
@@ -105,6 +106,17 @@ const determineArea = async (categoryId, subcategory) => {
   }
 };
 
+// Función auxiliar para verificar si el usuario es admin
+const isUserAdmin = async (roleId) => {
+  try {
+    const userRole = await Role.findById(roleId);
+    return userRole?.name === 'admin';
+  } catch (error) {
+    console.error('Error al verificar rol:', error);
+    return false;
+  }
+};
+
 export const createTicket = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -192,10 +204,10 @@ export const createTicket = async (req, res) => {
 export const getAllTickets = async (req, res) => {
   try {
     const userId = req.user.id;
-    const userRole = req.user.role;
+    const isAdmin = await isUserAdmin(req.user.role);
 
     let query = {};
-    if (userRole !== 'admin') {
+    if (!isAdmin) {
       query = { clientId: userId };
     }
 
@@ -251,7 +263,7 @@ export const getAllTickets = async (req, res) => {
 export const getTicketById = async (req, res) => {
   try {
     const userId = req.user.id;
-    const userRole = req.user.role;
+    const isAdmin = await isUserAdmin(req.user.role);
 
     const ticket = await Ticket.findById(req.params.id)
       .populate('category', 'nombre_categoria descripcion_categoria color_categoria')
@@ -263,7 +275,7 @@ export const getTicketById = async (req, res) => {
       return res.status(404).json({ message: 'Ticket no encontrado' });
     }
 
-    if (userRole !== 'admin' && ticket.clientId.toString() !== userId) {
+    if (!isAdmin && ticket.clientId.toString() !== userId) {
       return res.status(403).json({ message: 'No tiene permiso para ver este ticket' });
     }
 
@@ -304,7 +316,7 @@ export const getTicketById = async (req, res) => {
 export const updateTicket = async (req, res) => {
   try {
     const userId = req.user.id;
-    const userRole = req.user.role;
+    const isAdmin = await isUserAdmin(req.user.role);
 
     const previousTicket = await Ticket.findById(req.params.id);
     
@@ -312,7 +324,7 @@ export const updateTicket = async (req, res) => {
       return res.status(404).json({ message: 'Ticket no encontrado' });
     }
 
-    if (userRole !== 'admin' && previousTicket.clientId.toString() !== userId) {
+    if (!isAdmin && previousTicket.clientId.toString() !== userId) {
       return res.status(403).json({ message: 'No tiene permiso para actualizar este ticket' });
     }
 
@@ -455,7 +467,7 @@ export const updateTicket = async (req, res) => {
 export const deleteTicket = async (req, res) => {
   try {
     const userId = req.user.id;
-    const userRole = req.user.role;
+    const isAdmin = await isUserAdmin(req.user.role);
 
     const ticket = await Ticket.findById(req.params.id)
       .populate('clientId', 'name email')
@@ -465,7 +477,7 @@ export const deleteTicket = async (req, res) => {
       return res.status(404).json({ message: 'Ticket no encontrado' });
     }
 
-    if (userRole !== 'admin') {
+    if (!isAdmin) {
       return res.status(403).json({ message: 'No tiene permiso para eliminar tickets' });
     }
 
@@ -519,11 +531,11 @@ export const deleteTicket = async (req, res) => {
 export const getTicketsByCategory = async (req, res) => {
   try {
     const userId = req.user.id;
-    const userRole = req.user.role;
+    const isAdmin = await isUserAdmin(req.user.role);
 
     let query = { category: req.params.category };
     
-    if (userRole !== 'admin') {
+    if (!isAdmin) {
       query.clientId = userId;
     }
 
@@ -542,14 +554,14 @@ export const getTicketsByCategory = async (req, res) => {
 export const getTicketHistory = async (req, res) => {
   try {
     const userId = req.user.id;
-    const userRole = req.user.role;
+    const isAdmin = await isUserAdmin(req.user.role);
 
     const ticket = await Ticket.findById(req.params.id);
     if (!ticket) {
       return res.status(404).json({ message: 'Ticket no encontrado' });
     }
 
-    if (userRole !== 'admin' && ticket.clientId.toString() !== userId) {
+    if (!isAdmin && ticket.clientId.toString() !== userId) {
       return res.status(403).json({ message: 'No tiene permiso para ver este historial' });
     }
 
