@@ -1,36 +1,47 @@
 import mongoose from 'mongoose';
 
 const menuSchema = new mongoose.Schema({
-  nombre: {
+  name: {
     type: String,
     required: true,
     unique: true
   },
-  ruta: {
+  path: {
     type: String,
     required: true,
     unique: true
   },
-  icono: {
+  icon: {
     type: String,
     required: true
   },
-  orden: {
+  parentId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Menu',
+    default: null
+  },
+  order: {
     type: Number,
-    required: true
+    default: 0
   },
   isActive: {
     type: Boolean,
     default: true
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now
-  },
-  updatedAt: {
-    type: Date,
-    default: Date.now
   }
+}, {
+  timestamps: true,
+  versionKey: false
 });
 
-export default mongoose.model('Menu', menuSchema); 
+// Eliminar índices existentes antes de crear nuevos
+menuSchema.pre('save', async function(next) {
+  try {
+    await mongoose.connection.collections.menus?.dropIndexes();
+  } catch (error) {
+    console.log('No hay índices para eliminar');
+  }
+  next();
+});
+
+const Menu = mongoose.model('Menu', menuSchema);
+export default Menu; 

@@ -7,7 +7,8 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
-    "test": "jest"
+    "test": "jest",
+    "seed:menus": "node src/seeders/menu.seeder.js"
   },
   "author": "",
   "license": "ISC",
