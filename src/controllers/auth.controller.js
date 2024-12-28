@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import dotenv from 'dotenv';
 import { JWT_SECRET, JWT_EXPIRES_IN } from '../config/jwt.config.js';
 import Role from '../models/role.model.js';
+import speakeasy from 'speakeasy';
 
 dotenv.config();
 
@@ -151,4 +152,124 @@ export const logout = async (req, res) => {
     console.error('Error durante logout:', error);
     res.status(500).json({ message: error.message });
   }
+};
+
+export const authController = {
+    setupMFA: async (req, res) => {
+        try {
+            const userId = req.user.id;
+            const user = await User.findById(userId);
+
+            if (!user) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Usuario no encontrado'
+                });
+            }
+
+            // Generar secreto MFA si no existe
+            const secret = speakeasy.generateSecret({
+                length: 20,
+                name: `HelpDesk:${user.email}`
+            });
+
+            // Guardar el secreto en el usuario
+            user.mfaSecret = secret.base32;
+            user.mfaSetup = true;
+            await user.save();
+
+            res.json({
+                success: true,
+                data: {
+                    secret: secret.base32,
+                    otpauth_url: secret.otpauth_url
+                }
+            });
+        } catch (error) {
+            res.status(500).json({
+                success: false,
+                message: error.message
+            });
+        }
+    },
+
+    verifyMFA: async (req, res) => {
+        try {
+            const { userId, token } = req.body;
+            const user = await User.findById(userId);
+
+            if (!user || !user.mfaSecret || !user.mfaSetup) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Usuario no encontrado o MFA no configurado'
+                });
+            }
+
+            // Verificar el token
+            const verified = speakeasy.totp.verify({
+                secret: user.mfaSecret,
+                encoding: 'base32',
+                token: token,
+                window: 1 // Permitir 1 intervalo de tiempo antes/después
+            });
+
+            if (verified) {
+                user.mfaEnabled = true;
+                await user.save();
+
+                res.json({
+                    success: true,
+                    message: 'MFA verificado y habilitado correctamente'
+                });
+            } else {
+                res.status(400).json({
+                    success: false,
+                    message: 'Código de verificación inválido'
+                });
+            }
+        } catch (error) {
+            res.status(500).json({
+                success: false,
+                message: error.message
+            });
+        }
+    },
+
+    validateMFA: async (req, res) => {
+        try {
+            const { userId, token } = req.body;
+            const user = await User.findById(userId);
+
+            if (!user || !user.mfaEnabled) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Usuario no encontrado o MFA no habilitado'
+                });
+            }
+
+            const validated = speakeasy.totp.verify({
+                secret: user.mfaSecret,
+                encoding: 'base32',
+                token: token,
+                window: 1
+            });
+
+            if (validated) {
+                res.json({
+                    success: true,
+                    message: 'Código MFA válido'
+                });
+            } else {
+                res.status(400).json({
+                    success: false,
+                    message: 'Código MFA inválido'
+                });
+            }
+        } catch (error) {
+            res.status(500).json({
+                success: false,
+                message: error.message
+            });
+        }
+    }
 };

@@ -37,6 +37,17 @@ const userSchema = new mongoose.Schema({
         type: Boolean,
         default: true
     },
+    mfaSecret: { 
+        type: String 
+    },
+    mfaEnabled: { 
+        type: Boolean, 
+        default: false 
+    },
+    mfaSetup: { 
+        type: Boolean, 
+        default: false 
+    },
     lastLogin: {
         type: Date
     },
