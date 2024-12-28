@@ -30,19 +30,24 @@ export const userController = {
   // Obtener todos los usuarios
   getAllUsers: async (req, res) => {
     try {
-      const users = await User.find({}).select('-password');
+      const users = await User.find({})
+        .populate('role', 'name')
+        .populate('area', 'area')
+        .select('-password');
       
-      // Obtener los nombres de los roles para cada usuario
-      const usersWithRoleNames = await Promise.all(users.map(async (user) => {
+      // Obtener los nombres de los roles y áreas para cada usuario
+      const usersWithDetails = users.map(user => {
         const userObj = user.toObject();
-        const role = await Role.findById(user.role);
-        userObj.roleName = role ? role.name : null;
-        return userObj;
-      }));
+        return {
+          ...userObj,
+          roleName: user.role?.name || null,
+          areaName: user.area?.area || null
+        };
+      });
 
       res.status(200).json({
         success: true,
-        data: usersWithRoleNames
+        data: usersWithDetails
       });
     } catch (error) {
       res.status(400).json({
@@ -55,7 +60,11 @@ export const userController = {
   // Obtener usuario por ID
   getUserById: async (req, res) => {
     try {
-      const user = await User.findById(req.params.id).select('-password');
+      const user = await User.findById(req.params.id)
+        .populate('role', 'name')
+        .populate('area', 'area')
+        .select('-password');
+
       if (!user) {
         return res.status(404).json({
           success: false,
@@ -133,6 +142,55 @@ export const userController = {
         success: false,
         message: error.message
       });
+    }
+  },
+
+  // Obtener usuarios con nombre de área
+  getUsers: async (req, res) => {
+    try {
+      const users = await User.find()
+        .populate('role', 'name')
+        .populate('area', 'area')
+        .select('-password');
+
+      // Transformar los datos para incluir el nombre del área
+      const usersWithAreaName = users.map(user => {
+        const userObject = user.toObject();
+        return {
+          ...userObject,
+          areaName: user.area?.area || null,
+          roleName: user.role?.name || null
+        };
+      });
+
+      res.json(usersWithAreaName);
+    } catch (error) {
+      res.status(500).json({ message: error.message });
+    }
+  },
+
+  // Obtener perfil del usuario
+  getProfile: async (req, res) => {
+    try {
+      const user = await User.findById(req.user.id)
+        .populate('role', 'name')
+        .populate('area', 'area')
+        .select('-password');
+
+      if (!user) {
+        return res.status(404).json({ message: 'Usuario no encontrado' });
+      }
+
+      // Transformar los datos para incluir el nombre del área
+      const userWithAreaName = {
+        ...user.toObject(),
+        areaName: user.area?.area || null,
+        roleName: user.role?.name || null
+      };
+
+      res.json(userWithAreaName);
+    } catch (error) {
+      res.status(500).json({ message: error.message });
     }
   }
 };

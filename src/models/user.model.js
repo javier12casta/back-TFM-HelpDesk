@@ -19,29 +19,56 @@ const userSchema = new mongoose.Schema({
         type: String,
         required: true
     },
-    role: {
+    name: {
         type: String,
-        enum: ['user', 'admin'],
-        default: 'user'
+        required: false
+    },
+    role: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Role',
+        required: true
+    },
+    area: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Area',
+        required: false
     },
     isActive: {
         type: Boolean,
         default: true
     },
-    mfaSecret: { type: String },
-    mfaEnabled: { type: Boolean, default: false },
-    mfaSetup: { type: Boolean, default: false },
-    mfaValidated: { type: Boolean, default: false }
+    lastLogin: {
+        type: Date
+    },
+    createdAt: {
+        type: Date,
+        default: Date.now
+    },
+    updatedAt: {
+        type: Date
+    }
 }, {
-    timestamps: true,
-    versionKey: false
+    timestamps: true
 });
 
-// Hash password before saving
+// Middleware para encriptar la contraseña antes de guardar
 userSchema.pre('save', async function(next) {
     if (!this.isModified('password')) return next();
-    this.password = await bcrypt.hash(this.password, 10);
+    
+    try {
+        const salt = await bcrypt.genSalt(10);
+        this.password = await bcrypt.hash(this.password, salt);
+        next();
+    } catch (error) {
+        next(error);
+    }
 });
 
+// Método para comparar contraseñas
+userSchema.methods.comparePassword = async function(candidatePassword) {
+    return bcrypt.compare(candidatePassword, this.password);
+};
+
 const User = mongoose.model('User', userSchema);
+
 export default User;
