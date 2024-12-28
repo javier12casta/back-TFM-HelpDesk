@@ -163,13 +163,14 @@ export const createTicket = async (req, res) => {
       .populate('clientId', 'name email')
       .populate('assignedTo', 'name email');
 
+    const user = await User.findById(populatedTicket.clientId._id);
     // Enviar correo al creador del ticket
     const mailOptionsCreator = {
       from: process.env.EMAIL_USER,
       to: populatedTicket.clientId.email,
       subject: 'Ticket Creado Exitosamente',
       text: `
-        Hola ${populatedTicket.clientId.username},
+        Hola ${user.username},
 
         Tu ticket ha sido creado exitosamente con los siguientes detalles:
 
