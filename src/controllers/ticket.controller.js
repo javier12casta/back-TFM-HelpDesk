@@ -155,7 +155,42 @@ export const createTicket = async (req, res) => {
     
     const savedTicket = await newTicket.save();
 
-    // Crear notificación para el creador del ticket
+    // Poblar los campos de referencia para la respuesta y el correo
+    const populatedTicket = await Ticket.findById(savedTicket._id)
+      .populate('category', 'nombre_categoria descripcion_categoria')
+      .populate('area', 'area detalle')
+      .populate('clientId', 'name email')
+      .populate('assignedTo', 'name email');
+
+    // Enviar correo al creador del ticket
+    const mailOptionsCreator = {
+      from: process.env.EMAIL_USER,
+      to: populatedTicket.clientId.email,
+      subject: 'Ticket Creado Exitosamente',
+      text: `
+        Hola ${populatedTicket.clientId.username},
+
+        Tu ticket ha sido creado exitosamente con los siguientes detalles:
+
+        Número de Ticket: ${savedTicket.ticketNumber}
+        Descripción: ${description}
+        Categoría: ${populatedTicket.category.nombre_categoria}
+        Subcategoría: ${subcategory.nombre_subcategoria}
+        Detalle: ${subcategory.subcategoria_detalle.nombre_subcategoria_detalle}
+        Área: ${populatedTicket.area.area}
+        Prioridad: ${priority}
+        Estado: ${savedTicket.status}
+
+        Puedes hacer seguimiento de tu ticket en nuestra plataforma.
+
+        Saludos cordiales,
+        Equipo de Soporte
+      `
+    };
+
+    await transporter.sendMail(mailOptionsCreator);
+
+    // Código existente para notificaciones
     await createNotification(userId, {
       type: 'success',
       title: 'Ticket Creado',
@@ -163,7 +198,7 @@ export const createTicket = async (req, res) => {
       ticketId: savedTicket._id
     });
 
-    // Si hay un agente asignado, crear notificación para él
+    // Si hay un agente asignado, crear notificación y enviar correo
     if (assignedTo) {
       await createNotification(assignedTo, {
         type: 'info',
@@ -171,16 +206,37 @@ export const createTicket = async (req, res) => {
         message: `Se te ha asignado el ticket ${savedTicket.ticketNumber}`,
         ticketId: savedTicket._id
       });
+
+      // Enviar correo al agente asignado
+      const mailOptionsAgent = {
+        from: process.env.EMAIL_USER,
+        to: populatedTicket.assignedTo.email,
+        subject: 'Nuevo Ticket Asignado',
+        text: `
+          Hola ${populatedTicket.assignedTo.name},
+
+          Se te ha asignado un nuevo ticket:
+
+          Número de Ticket: ${savedTicket.ticketNumber}
+          Descripción: ${description}
+          Categoría: ${populatedTicket.category.nombre_categoria}
+          Subcategoría: ${subcategory.nombre_subcategoria}
+          Detalle: ${subcategory.subcategoria_detalle.nombre_subcategoria_detalle}
+          Área: ${populatedTicket.area.area}
+          Prioridad: ${priority}
+          Estado: ${savedTicket.status}
+
+          Por favor, revisa la plataforma para más detalles.
+
+          Saludos cordiales,
+          Equipo de Soporte
+        `
+      };
+
+      await transporter.sendMail(mailOptionsAgent);
     }
 
-    // Poblar los campos de referencia para la respuesta
-    const populatedTicket = await Ticket.findById(savedTicket._id)
-      .populate('category', 'nombre_categoria descripcion_categoria')
-      .populate('area', 'area detalle')
-      .populate('clientId', 'name email')
-      .populate('assignedTo', 'name email');
-
-    // Notificar a los administradores (si es necesario)
+    // Notificar a los administradores
     io.to('admin').emit('ticketCreated', {
       ticket: populatedTicket,
       message: `Nuevo ticket creado: ${savedTicket.ticketNumber}`
