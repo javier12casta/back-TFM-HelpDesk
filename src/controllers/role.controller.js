@@ -1,22 +1,37 @@
 import Role from '../models/role.model.js';
+import Menu from '../models/menu.model.js';
 
 export const createRole = async (req, res) => {
   try {
-    const { name, description, permissions, menus } = req.body;
+    const { name, description, permissions, menus: menuPaths } = req.body;
 
     const existingRole = await Role.findOne({ name });
     if (existingRole) {
       return res.status(400).json({ message: 'El rol ya existe' });
     }
 
+    // Buscar IDs de menús basados en los paths
+    let menuIds = [];
+    if (menuPaths && menuPaths.length > 0) {
+      const foundMenus = await Menu.find({ path: { $in: menuPaths } });
+      menuIds = foundMenus.map(menu => menu._id);
+      
+      // Verificar si se encontraron todos los menús
+      if (menuIds.length !== menuPaths.length) {
+        return res.status(400).json({ 
+          message: 'Algunos paths de menús no son válidos' 
+        });
+      }
+    }
+
     const role = new Role({
       name,
       description,
       permissions,
-      menus
+      menus: menuIds
     });
 
-    const savedRole = await role.save();
+    const savedRole = await (await role.save()).populate('menus', 'name path icon');
     res.status(201).json(savedRole);
   } catch (error) {
     res.status(400).json({ message: error.message });
@@ -26,7 +41,7 @@ export const createRole = async (req, res) => {
 export const getAllRoles = async (req, res) => {
   try {
     const roles = await Role.find()
-      .populate('menus', 'nombre ruta icono');
+      .populate('menus', 'name path icon');
     res.json(roles);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -36,7 +51,7 @@ export const getAllRoles = async (req, res) => {
 export const getRoleById = async (req, res) => {
   try {
     const role = await Role.findById(req.params.id)
-      .populate('menus', 'nombre ruta icono');
+      .populate('menus', 'name path icon');
     if (!role) {
       return res.status(404).json({ message: 'Rol no encontrado' });
     }
@@ -48,14 +63,31 @@ export const getRoleById = async (req, res) => {
 
 export const updateRole = async (req, res) => {
   try {
+    const { menus: menuPaths, ...roleData } = req.body;
+
+    // Si se enviaron paths de menús, buscar sus IDs
+    let menuIds = [];
+    if (menuPaths && menuPaths.length > 0) {
+      const foundMenus = await Menu.find({ path: { $in: menuPaths } });
+      menuIds = foundMenus.map(menu => menu._id);
+      
+      // Verificar si se encontraron todos los menús
+      if (menuIds.length !== menuPaths.length) {
+        return res.status(400).json({ 
+          message: 'Algunos paths de menús no son válidos' 
+        });
+      }
+    }
+
     const updatedRole = await Role.findByIdAndUpdate(
       req.params.id,
       {
-        ...req.body,
+        ...roleData,
+        menus: menuIds,
         updatedAt: Date.now()
       },
       { new: true }
-    ).populate('menus', 'nombre ruta icono');
+    ).populate('menus', 'name path icon');
 
     if (!updatedRole) {
       return res.status(404).json({ message: 'Rol no encontrado' });
