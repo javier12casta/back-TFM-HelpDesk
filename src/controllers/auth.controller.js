@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import dotenv from 'dotenv';
 import { JWT_SECRET, JWT_EXPIRES_IN } from '../config/jwt.config.js';
+import Role from '../models/role.model.js';
 
 dotenv.config();
 
@@ -98,6 +99,9 @@ export const login = async (req, res) => {
       maxAge: 24 * 60 * 60 * 1000
     });
 
+    const role = await Role.findById(user.role);
+    const roleName = role ? role.name : null;
+
     res.json({
       message: 'Login successful',
       requiresMfaSetup,
@@ -105,7 +109,8 @@ export const login = async (req, res) => {
       user: {
         id: user._id,
         email: user.email,
-        role: user.role
+        role: user.role,
+        roleName: roleName
       }
     });
   } catch (error) {

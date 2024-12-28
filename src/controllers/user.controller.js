@@ -1,4 +1,5 @@
 import User from '../models/user.model.js';
+import Role from '../models/role.model.js';
 
 export const userController = {
   // Crear usuario
@@ -6,9 +7,12 @@ export const userController = {
     try {
       const newUser = new User(req.body);
       const savedUser = await newUser.save();
-      // Excluimos el password de la respuesta
       const userResponse = savedUser.toObject();
       delete userResponse.password;
+      
+      // Obtener el nombre del rol
+      const role = await Role.findById(savedUser.role);
+      userResponse.roleName = role ? role.name : null;
       
       res.status(201).json({
         success: true,
@@ -27,9 +31,18 @@ export const userController = {
   getAllUsers: async (req, res) => {
     try {
       const users = await User.find({}).select('-password');
+      
+      // Obtener los nombres de los roles para cada usuario
+      const usersWithRoleNames = await Promise.all(users.map(async (user) => {
+        const userObj = user.toObject();
+        const role = await Role.findById(user.role);
+        userObj.roleName = role ? role.name : null;
+        return userObj;
+      }));
+
       res.status(200).json({
         success: true,
-        data: users
+        data: usersWithRoleNames
       });
     } catch (error) {
       res.status(400).json({
@@ -49,9 +62,14 @@ export const userController = {
           message: 'Usuario no encontrado'
         });
       }
+
+      const userObj = user.toObject();
+      const role = await Role.findById(user.role);
+      userObj.roleName = role ? role.name : null;
+
       res.status(200).json({
         success: true,
-        data: user
+        data: userObj
       });
     } catch (error) {
       res.status(400).json({
@@ -77,9 +95,13 @@ export const userController = {
         });
       }
 
+      const userObj = updatedUser.toObject();
+      const role = await Role.findById(updatedUser.role);
+      userObj.roleName = role ? role.name : null;
+
       res.status(200).json({
         success: true,
-        data: updatedUser,
+        data: userObj,
         message: 'Usuario actualizado exitosamente'
       });
     } catch (error) {
