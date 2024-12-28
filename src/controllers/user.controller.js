@@ -91,11 +91,22 @@ export const userController = {
   // Actualizar usuario
   updateUser: async (req, res) => {
     try {
+      // Crear una copia del body para modificar
+      const updateData = { ...req.body };
+
+      // Si area es una cadena vacía, establecerla como null
+      if (updateData.area === '') {
+        updateData.area = null;
+      }
+
       const updatedUser = await User.findByIdAndUpdate(
         req.params.id,
-        { $set: req.body },
+        { $set: updateData },
         { new: true }
-      ).select('-password');
+      )
+      .populate('role', 'name')
+      .populate('area', 'area')
+      .select('-password');
 
       if (!updatedUser) {
         return res.status(404).json({
@@ -104,13 +115,15 @@ export const userController = {
         });
       }
 
+      // Transformar los datos para incluir nombres de rol y área
       const userObj = updatedUser.toObject();
-      const role = await Role.findById(updatedUser.role);
-      userObj.roleName = role ? role.name : null;
-
-      res.status(200).json({
+      return res.status(200).json({
         success: true,
-        data: userObj,
+        data: {
+          ...userObj,
+          roleName: updatedUser.role?.name || null,
+          areaName: updatedUser.area?.area || null
+        },
         message: 'Usuario actualizado exitosamente'
       });
     } catch (error) {
