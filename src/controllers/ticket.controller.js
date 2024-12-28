@@ -6,6 +6,7 @@ import transporter from '../config/nodemailer.config.js';
 import { io } from '../server.js';
 import { createNotification } from './notification.controller.js';
 import Role from '../models/role.model.js';
+import User from '../models/user.model.js';
 
 // Función auxiliar para registrar cambios
 const logTicketChange = async (ticketId, userId, changeType, previousData, currentData, req) => {
@@ -261,9 +262,28 @@ export const getAllTickets = async (req, res) => {
   try {
     const userId = req.user.id;
     const isAdmin = await isUserAdmin(req.user.role);
+    
+    // Obtener el usuario con su rol y área
+    const user = await User.findById(userId)
+      .populate('role', 'name')
+      .populate('area', 'area');
 
     let query = {};
-    if (!isAdmin) {
+    
+    // Si es admin, puede ver todos los tickets
+    if (isAdmin) {
+      // No aplicar filtros
+    }
+    // Si es supervisor, ver tickets de su área
+    else if (user.role?.name === 'supervisor' && user.area) {
+      query = { area: user.area._id };
+    }
+    // Si es soporte, ver tickets asignados a él
+    else if (user.role?.name === 'soporte') {
+      query = { assignedTo: userId };
+    }
+    // Si es usuario normal, solo ver sus tickets
+    else {
       query = { clientId: userId };
     }
 
