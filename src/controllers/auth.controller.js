@@ -110,7 +110,9 @@ export const login = async (req, res) => {
         id: user._id,
         email: user.email,
         role: user.role,
-        roleName: roleName
+        roleName: roleName,
+        area: user.area || null,
+        areaName: user.area?.area || null
       }
     });
   } catch (error) {
