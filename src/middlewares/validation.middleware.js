@@ -3,49 +3,100 @@ import mongoose from 'mongoose';
 
 // Validación para creación y actualización de tickets
 export const validateTicket = [
+  (req, res, next) => {
+    // Log para debugging
+    console.log('Content-Type:', req.headers['content-type']);
+    console.log('Raw Body:', req.body);
+    console.log('Description value:', req.body.description);
+    console.log('CategoryId value:', req.body.categoryId);
+    console.log('Subcategory value:', req.body.subcategory);
+    console.log('Priority value:', req.body.priority);
+    next();
+  },
+
   check('description')
-    .notEmpty()
-    .withMessage('La descripción es requerida')
-    .isLength({ min: 10 })
-    .withMessage('La descripción debe tener al menos 10 caracteres'),
+    .exists()
+    .custom((value, { req }) => {
+      const description = req.body?.description;
+      console.log('Checking description:', description);
+      
+      if (!description || description === 'undefined' || description === '') {
+        throw new Error('La descripción es requerida');
+      }
+      if (description.length < 10) {
+        throw new Error('La descripción debe tener al menos 10 caracteres');
+      }
+      return true;
+    }),
   
   check('categoryId')
-    .notEmpty()
-    .withMessage('La categoría es requerida')
-    .custom((value) => {
-      return mongoose.Types.ObjectId.isValid(value);
-    })
-    .withMessage('ID de categoría no válido'),
+    .exists()
+    .custom((value, { req }) => {
+      const categoryId = req.body?.categoryId;
+      console.log('Checking categoryId:', categoryId);
+      
+      if (!categoryId || categoryId === 'undefined' || categoryId === '') {
+        throw new Error('La categoría es requerida');
+      }
+      if (!mongoose.Types.ObjectId.isValid(categoryId)) {
+        throw new Error('ID de categoría no válido');
+      }
+      return true;
+    }),
   
   check('subcategory')
-    .notEmpty()
-    .withMessage('La subcategoría es requerida')
-    .isObject()
-    .withMessage('Formato de subcategoría inválido'),
-  
-  check('subcategory.nombre_subcategoria')
-    .notEmpty()
-    .withMessage('El nombre de la subcategoría es requerido'),
-  
-  check('subcategory.subcategoria_detalle')
-    .notEmpty()
-    .withMessage('El detalle de la subcategoría es requerido')
-    .isObject()
-    .withMessage('Formato de detalle de subcategoría inválido'),
-  
-  check('subcategory.subcategoria_detalle.nombre_subcategoria_detalle')
-    .notEmpty()
-    .withMessage('El nombre del detalle de la subcategoría es requerido'),
+    .exists()
+    .custom((value, { req }) => {
+      const subcategory = req.body?.subcategory;
+      console.log('Checking subcategory:', subcategory);
+      
+      if (!subcategory || subcategory === 'undefined' || subcategory === '') {
+        throw new Error('La subcategoría es requerida');
+      }
+      
+      let subcategoryObj;
+      try {
+        subcategoryObj = typeof subcategory === 'string' ? JSON.parse(subcategory) : subcategory;
+        console.log('Parsed subcategory:', subcategoryObj);
+      } catch (error) {
+        console.error('Error parsing subcategory:', error);
+        throw new Error('Formato de subcategoría inválido');
+      }
+
+      if (!subcategoryObj.nombre_subcategoria) {
+        throw new Error('El nombre de la subcategoría es requerido');
+      }
+
+      if (!subcategoryObj.subcategoria_detalle) {
+        throw new Error('El detalle de la subcategoría es requerido');
+      }
+
+      if (!subcategoryObj.subcategoria_detalle.nombre_subcategoria_detalle) {
+        throw new Error('El nombre del detalle de la subcategoría es requerido');
+      }
+
+      return true;
+    }),
   
   check('priority')
-    .notEmpty()
-    .withMessage('La prioridad es requerida')
-    .isIn(['Baja', 'Media', 'Alta'])
-    .withMessage('Prioridad no válida'),
+    .exists()
+    .custom((value, { req }) => {
+      const priority = req.body?.priority;
+      console.log('Checking priority:', priority);
+      
+      if (!priority || priority === 'undefined' || priority === '') {
+        throw new Error('La prioridad es requerida');
+      }
+      if (!['Baja', 'Media', 'Alta'].includes(priority)) {
+        throw new Error('Prioridad no válida');
+      }
+      return true;
+    }),
 
   (req, res, next) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
+      console.log('Validation errors:', errors.array());
       return res.status(400).json({ errors: errors.array() });
     }
     next();

@@ -15,8 +15,14 @@ import {
 } from '../controllers/ticket.controller.js';
 import { validateTicket } from '../middlewares/validation.middleware.js';
 import { authMiddleware } from '../middlewares/auth.middleware.js';
+import multer from 'multer';
 
 const ticketRoutes = express.Router();
+const upload = multer({
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB max file size
+  }
+});
 
 /**
  * @swagger
@@ -264,7 +270,7 @@ ticketRoutes.get('/tickets/:id/history', authMiddleware, getTicketHistory);
 
 // Rutas adicionales
 ticketRoutes.get('/tickets/category/:category', authMiddleware, getTicketsByCategory);
-ticketRoutes.put('/tickets/:id', authMiddleware, validateTicket, updateTicket);
+ticketRoutes.patch('/tickets/:id', authMiddleware, updateTicket);
 ticketRoutes.delete('/tickets/:id', authMiddleware, deleteTicket);
 ticketRoutes.post('/tickets/assign', authMiddleware, assignTicket);
 

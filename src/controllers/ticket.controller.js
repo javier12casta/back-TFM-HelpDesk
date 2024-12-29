@@ -10,6 +10,13 @@ import User from '../models/user.model.js';
 import Comment from '../models/comment.model.js';
 import multer from 'multer';
 import path from 'path';
+import fs from 'fs';
+import { dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+// Obtener el directorio actual
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 // Función auxiliar para registrar cambios
 const logTicketChange = async (ticketId, userId, changeType, previousData, currentData, req) => {
@@ -124,10 +131,25 @@ const isUserAdmin = async (roleId) => {
 // Configuración de multer para subida de archivos
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    cb(null, 'uploads/ticket-attachments/');
+    const uploadDir = path.join(__dirname, '../../uploads/ticket-attachments');
+    console.log('Directorio de upload:', uploadDir);
+    
+    try {
+      if (!fs.existsSync(uploadDir)) {
+        console.log('Creando directorio:', uploadDir);
+        fs.mkdirSync(uploadDir, { recursive: true });
+      }
+      console.log('Directorio existe o fue creado exitosamente');
+      cb(null, uploadDir);
+    } catch (error) {
+      console.error('Error al crear directorio:', error);
+      cb(error);
+    }
   },
   filename: function (req, file, cb) {
-    cb(null, Date.now() + '-' + file.originalname);
+    const filename = Date.now() + '-' + file.originalname;
+    console.log('Nombre de archivo a crear:', filename);
+    cb(null, filename);
   }
 });
 
@@ -601,7 +623,7 @@ export const updateTicket = async (req, res) => {
       if (err instanceof multer.MulterError) {
         return res.status(400).json({ message: 'Error al subir archivo: ' + err.message });
       } else if (err) {
-        return res.status(500).json({ message: 'Error al procesar archivo' });
+        return res.status(500).json({ message: 'Error al procesar archivo: ' + err.message });
       }
 
       const userId = req.user.id;
@@ -613,7 +635,15 @@ export const updateTicket = async (req, res) => {
         return res.status(404).json({ message: 'Ticket no encontrado' });
       }
 
-      if (!isAdmin && previousTicket.clientId.toString() !== userId) {
+      // Verificar permisos
+      const user = await User.findById(userId).populate('role', 'name');
+      const isSupervisor = user.role?.name === 'supervisor';
+      const isSupport = user.role?.name === 'soporte';
+      const isCreator = previousTicket.clientId.toString() === userId;
+      const isAssignedAgent = previousTicket.assignedTo?.toString() === userId;
+      const isSupervisorOfArea = isSupervisor && user.area && previousTicket.area.toString() === user.area.toString();
+
+      if (!isAdmin && !isCreator && !isAssignedAgent && !isSupervisorOfArea) {
         return res.status(403).json({ message: 'No tiene permiso para actualizar este ticket' });
       }
 
@@ -625,9 +655,15 @@ export const updateTicket = async (req, res) => {
       }
 
       // Preparar datos de actualización
-      const updateData = { ...req.body };
-
-      // Si hay un nuevo archivo, actualizar el attachment
+      const updateData = {};
+      
+      // Procesar campos del FormData
+      if (req.body.description) updateData.description = req.body.description;
+      if (req.body.priority) updateData.priority = req.body.priority;
+      if (req.body.status) updateData.status = req.body.status;
+      if (req.body.assignedTo) updateData.assignedTo = req.body.assignedTo;
+      
+      // Si hay un nuevo archivo adjunto
       if (req.file) {
         updateData.attachment = {
           filename: req.file.originalname,
@@ -636,24 +672,22 @@ export const updateTicket = async (req, res) => {
         };
       }
 
-      // Si se está actualizando la categoría, verificar que existe
-      if (updateData.categoryId) {
-        const category = await Category.findById(updateData.categoryId);
+      // Si se está actualizando la categoría
+      if (req.body.categoryId) {
+        const category = await Category.findById(req.body.categoryId);
         if (!category) {
           return res.status(404).json({ message: 'Categoría no encontrada' });
         }
-        updateData.category = updateData.categoryId;
-        delete updateData.categoryId;
+        updateData.category = req.body.categoryId;
       }
 
-      // Si se está actualizando el área, verificar que existe
-      if (updateData.areaId) {
-        const area = await Area.findById(updateData.areaId);
+      // Si se está actualizando el área
+      if (req.body.areaId) {
+        const area = await Area.findById(req.body.areaId);
         if (!area) {
           return res.status(404).json({ message: 'Área no encontrada' });
         }
-        updateData.area = updateData.areaId;
-        delete updateData.areaId;
+        updateData.area = req.body.areaId;
       }
 
       let changeType = 'UPDATED';
@@ -661,6 +695,7 @@ export const updateTicket = async (req, res) => {
       let notificationTitle = 'Ticket Actualizado';
       let notificationMessage = `El ticket ${previousTicket.ticketNumber} ha sido actualizado`;
 
+      // Determinar tipo de cambio para notificaciones
       if (updateData.status && updateData.status !== previousTicket.status) {
         changeType = 'STATUS_CHANGE';
         notificationMessage = `El estado del ticket ${previousTicket.ticketNumber} ha cambiado a ${updateData.status}`;
@@ -703,8 +738,7 @@ export const updateTicket = async (req, res) => {
         ticketId: updatedTicket._id
       });
 
-      // Resto del código de notificaciones...
-
+      // Registrar el cambio en el historial
       await logTicketChange(
         updatedTicket._id,
         userId,
@@ -714,10 +748,18 @@ export const updateTicket = async (req, res) => {
         req
       );
 
-      res.json(updatedTicket);
+      res.json({
+        success: true,
+        data: updatedTicket,
+        message: 'Ticket actualizado correctamente'
+      });
     });
   } catch (error) {
-    res.status(400).json({ message: error.message });
+    console.error('Error en updateTicket:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Error interno del servidor: ' + error.message 
+    });
   }
 };
 
