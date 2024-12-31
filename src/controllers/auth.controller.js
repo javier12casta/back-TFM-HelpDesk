@@ -9,13 +9,21 @@ import speakeasy from 'speakeasy';
 dotenv.config();
 
 export const register = async (req, res) => {
-  const { name, email, password, mfaEnabled } = req.body;
+  const { username, name, email, password, mfaEnabled } = req.body;
 
   try {
-    let user = await User.findOne({ email });
+    // Verificar si el usuario ya existe por email o username
+    let existingUser = await User.findOne({ 
+      $or: [
+        { email },
+        { username }
+      ]
+    });
 
-    if (user) {
-      return res.status(400).json({ msg: 'User already exists' });
+    if (existingUser) {
+      return res.status(400).json({ 
+        msg: existingUser.email === email ? 'Email already exists' : 'Username already exists' 
+      });
     }
 
     // Buscar el rol "user" en la base de datos
@@ -25,19 +33,14 @@ export const register = async (req, res) => {
     }
 
     user = new User({
-      name,
+      username,    // Campo requerido según el modelo
+      name,        // Campo opcional según el modelo
       email,
       password,
-      role: {
-        "$oid": userRole._id
-      },
+      role: userRole._id,  // ObjectId directo, no un objeto con $oid
       mfaEnabled: mfaEnabled || false,
-      mfaSetup: false,
-      mfaValidated: false
+      mfaSetup: false
     });
-
-    const salt = await bcrypt.genSalt(10);
-    user.password = await bcrypt.hash(password, salt);
 
     await user.save();
 
