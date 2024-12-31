@@ -18,10 +18,17 @@ export const register = async (req, res) => {
       return res.status(400).json({ msg: 'User already exists' });
     }
 
+    // Buscar el rol "user" en la base de datos
+    const userRole = await Role.findOne({ name: 'user' });
+    if (!userRole) {
+      return res.status(500).json({ msg: 'Default role not found' });
+    }
+
     user = new User({
       name,
       email,
       password,
+      role: userRole._id, // Asignar el ObjectId del rol
       mfaEnabled: mfaEnabled || false,
       mfaSetup: false,
       mfaValidated: false
