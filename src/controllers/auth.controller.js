@@ -32,12 +32,13 @@ export const register = async (req, res) => {
       return res.status(500).json({ msg: 'Default role not found' });
     }
 
-    user = new User({
-      username,    // Campo requerido según el modelo
-      name,        // Campo opcional según el modelo
+    // Crear nuevo usuario con el ObjectId del rol
+    const user = new User({
+      username,
+      name,
       email,
       password,
-      role: userRole._id,  // ObjectId directo, no un objeto con $oid
+      role: userRole._id.toString(), // Convertir el ObjectId a string
       mfaEnabled: mfaEnabled || false,
       mfaSetup: false
     });
