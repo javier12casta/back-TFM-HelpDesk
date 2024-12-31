@@ -18,6 +18,8 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+const UPLOAD_PATH = 'uploads/ticket-attachments';
+
 // Función auxiliar para registrar cambios
 const logTicketChange = async (ticketId, userId, changeType, previousData, currentData, req) => {
   try {
@@ -131,7 +133,7 @@ const isUserAdmin = async (roleId) => {
 // Configuración de multer para subida de archivos
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    const uploadDir = path.join(__dirname, '../../uploads/ticket-attachments');
+    const uploadDir = path.join(__dirname, '../../', UPLOAD_PATH);
     console.log('Directorio de upload:', uploadDir);
     
     try {
@@ -147,7 +149,9 @@ const storage = multer.diskStorage({
     }
   },
   filename: function (req, file, cb) {
-    const filename = Date.now() + '-' + file.originalname;
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const fileExt = path.extname(file.originalname);
+    const filename = `${uniqueSuffix}${fileExt}`;
     console.log('Nombre de archivo a crear:', filename);
     cb(null, filename);
   }
@@ -159,6 +163,14 @@ const upload = multer({
     fileSize: 5 * 1024 * 1024 // 5MB límite
   }
 }).single('attachment');
+
+// Función auxiliar para generar URL de descarga
+const generateDownloadUrl = (req, relativePath) => {
+  if (!relativePath) return null;
+  
+  const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
+  return `${baseUrl}/uploads/${relativePath}`;
+};
 
 // Agregar comentario a un ticket
 export const addComment = async (req, res) => {
@@ -187,7 +199,7 @@ export const addComment = async (req, res) => {
         text,
         attachment: req.file ? {
           filename: req.file.originalname,
-          path: req.file.path,
+          path: path.join('ticket-attachments', req.file.filename).replace(/\\/g, '/'),
           mimetype: req.file.mimetype
         } : undefined
       });
@@ -214,9 +226,13 @@ export const addComment = async (req, res) => {
 
       await comment.save();
 
-      // Poblar la información del usuario
+      // Poblar la información del usuario y agregar URL de descarga
       const populatedComment = await Comment.findById(comment._id)
         .populate('userId', 'username name email');
+
+      if (populatedComment.attachment) {
+        populatedComment.attachment.downloadUrl = generateDownloadUrl(req, populatedComment.attachment.path);
+      }
 
       // Notificar a los involucrados
       const notifyUsers = new Set([
@@ -385,6 +401,13 @@ export const createTicket = async (req, res) => {
         return res.status(400).json({ message: error.message });
       }
 
+      // Modificar cómo se guarda la información del archivo
+      const attachment = req.file ? {
+        filename: req.file.originalname,
+        path: path.join('ticket-attachments', req.file.filename).replace(/\\/g, '/'),
+        mimetype: req.file.mimetype
+      } : undefined;
+
       const newTicket = new Ticket({
         description,
         category: categoryId,
@@ -394,21 +417,22 @@ export const createTicket = async (req, res) => {
         assignedTo,
         area: areaId,
         ticketNumber: `TKT-${Date.now()}`,
-        attachment: req.file ? {
-          filename: req.file.originalname,
-          path: req.file.path,
-          mimetype: req.file.mimetype
-        } : undefined
+        attachment
       });
       
       const savedTicket = await newTicket.save();
 
-      // Poblar los campos de referencia para la respuesta y el correo
+      // Al poblar el ticket para la respuesta, agregar URL de descarga
       const populatedTicket = await Ticket.findById(savedTicket._id)
         .populate('category', 'nombre_categoria descripcion_categoria')
         .populate('area', 'area detalle')
         .populate('clientId', 'name email')
         .populate('assignedTo', 'name email');
+
+      // Agregar URL de descarga al ticket poblado
+      if (populatedTicket.attachment) {
+        populatedTicket.attachment.downloadUrl = generateDownloadUrl(req, populatedTicket.attachment.path);
+      }
 
       const user = await User.findById(populatedTicket.clientId._id);
       

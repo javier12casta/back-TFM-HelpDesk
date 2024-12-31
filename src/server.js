@@ -17,6 +17,18 @@ import { notificationRoutes } from './routes/notification.routes.js';
 import { getUserStoredNotifications, markNotificationAsRead } from './controllers/notification.controller.js';
 import { roleRoutes } from './routes/role.routes.js';
 import { menuRoutes } from './routes/menu.routes.js';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import fs from 'fs';
+
+// Obtener __dirname en módulos ES
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const uploadsDir = path.join(__dirname, '../uploads');
+if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+}
 
 dotenv.config();
 
@@ -79,6 +91,9 @@ app.get('/', (req, res) => {
 
 // Documentación Swagger
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+
+// Configurar ruta estática para archivos subidos
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 const server = http.createServer(app);
 export const io = new Server(server, {

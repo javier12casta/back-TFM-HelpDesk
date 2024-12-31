@@ -28,6 +28,26 @@ const commentSchema = new mongoose.Schema({
     type: Date,
     default: Date.now
   }
+}, {
+  timestamps: true,
+  toJSON: { 
+    virtuals: true,
+    transform: function(doc, ret) {
+      if (ret.attachment && ret.attachment.path) {
+        delete ret.attachment.path;
+      }
+      return ret;
+    }
+  }
+});
+
+// Agregar virtual para la URL de descarga
+commentSchema.virtual('attachment.downloadUrl').get(function() {
+  if (this.attachment && this.attachment.path) {
+    const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
+    return `${baseUrl}/uploads/${this.attachment.path}`;
+  }
+  return null;
 });
 
 const Comment = mongoose.model('Comment', commentSchema);

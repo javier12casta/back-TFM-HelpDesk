@@ -68,6 +68,25 @@ const ticketSchema = new mongoose.Schema({
     path: String,
     mimetype: String
   }
+}, {
+  timestamps: true,
+  toJSON: { 
+    virtuals: true,
+    transform: function(doc, ret) {
+      if (ret.attachment && ret.attachment.path) {
+        delete ret.attachment.path;
+      }
+      return ret;
+    }
+  }
+});
+
+ticketSchema.virtual('attachment.downloadUrl').get(function() {
+  if (this.attachment && this.attachment.path) {
+    const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
+    return `${baseUrl}/uploads/${this.attachment.path}`;
+  }
+  return null;
 });
 
 export default mongoose.model('Ticket', ticketSchema);
