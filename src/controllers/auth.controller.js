@@ -5,6 +5,7 @@ import dotenv from 'dotenv';
 import { JWT_SECRET, JWT_EXPIRES_IN } from '../config/jwt.config.js';
 import Role from '../models/role.model.js';
 import speakeasy from 'speakeasy';
+import mongoose from 'mongoose';
 
 dotenv.config();
 
@@ -38,7 +39,7 @@ export const register = async (req, res) => {
       name,
       email,
       password,
-      role: userRole._id.toString(), // Convertir el ObjectId a string
+      role: new mongoose.Types.ObjectId(userRole._id),
       mfaEnabled: mfaEnabled || false,
       mfaSetup: false
     });
