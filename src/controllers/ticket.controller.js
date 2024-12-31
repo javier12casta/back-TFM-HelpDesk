@@ -310,16 +310,77 @@ export const createTicket = async (req, res) => {
         assignedTo
       } = req.body;
 
+      // Log para debug
+      console.log('Datos recibidos:', {
+        description,
+        categoryId,
+        subcategory,
+        priority,
+        assignedTo
+      });
+
+      // Validar que todos los campos necesarios estén presentes
+      if (!description || !categoryId || !subcategory) {
+        return res.status(400).json({ 
+          message: 'Faltan campos requeridos (description, categoryId, subcategory)' 
+        });
+      }
+
+      // Si subcategory viene como string, intentar parsearlo
+      let subcategoryObj = subcategory;
+      if (typeof subcategory === 'string') {
+        try {
+          subcategoryObj = JSON.parse(subcategory);
+        } catch (error) {
+          console.error('Error al parsear subcategory:', error);
+          return res.status(400).json({ 
+            message: 'El campo subcategory debe ser un objeto válido o un JSON string válido' 
+          });
+        }
+      }
+
+      // Validar la estructura del objeto subcategory
+      if (!subcategoryObj || 
+          typeof subcategoryObj !== 'object' || 
+          !subcategoryObj.nombre_subcategoria || 
+          !subcategoryObj.subcategoria_detalle || 
+          !subcategoryObj.subcategoria_detalle.nombre_subcategoria_detalle) {
+        console.log('Estructura de subcategory inválida:', subcategoryObj);
+        return res.status(400).json({ 
+          message: 'El objeto subcategory debe incluir nombre_subcategoria y subcategoria_detalle.nombre_subcategoria_detalle',
+          receivedStructure: subcategoryObj
+        });
+      }
+
       // Verificar que la categoría existe
       const category = await Category.findById(categoryId);
       if (!category) {
         return res.status(404).json({ message: 'Categoría no encontrada' });
       }
 
-      // Determinar el área automáticamente
+      // Verificar que la subcategoría existe en la categoría
+      const subcategoriaExiste = category.subcategorias.some(
+        sub => sub.nombre_subcategoria === subcategoryObj.nombre_subcategoria &&
+               sub.subcategorias_detalle.some(
+                 det => det.nombre_subcategoria_detalle === subcategoryObj.subcategoria_detalle.nombre_subcategoria_detalle
+               )
+      );
+
+      if (!subcategoriaExiste) {
+        return res.status(400).json({ 
+          message: 'La subcategoría o el detalle de subcategoría especificado no existe en esta categoría',
+          received: {
+            subcategory: subcategoryObj.nombre_subcategoria,
+            detail: subcategoryObj.subcategoria_detalle.nombre_subcategoria_detalle
+          },
+          available: category.subcategorias
+        });
+      }
+
+      // Continuar con el resto del código usando subcategoryObj en lugar de subcategory
       let areaId;
       try {
-        areaId = await determineArea(categoryId, subcategory);
+        areaId = await determineArea(categoryId, subcategoryObj);
       } catch (error) {
         return res.status(400).json({ message: error.message });
       }
@@ -327,7 +388,7 @@ export const createTicket = async (req, res) => {
       const newTicket = new Ticket({
         description,
         category: categoryId,
-        subcategory,
+        subcategory: subcategoryObj,
         priority,
         clientId: userId,
         assignedTo,
@@ -364,8 +425,8 @@ export const createTicket = async (req, res) => {
           Número de Ticket: ${savedTicket.ticketNumber}
           Descripción: ${description}
           Categoría: ${populatedTicket.category.nombre_categoria}
-          Subcategoría: ${subcategory.nombre_subcategoria}
-          Detalle: ${subcategory.subcategoria_detalle.nombre_subcategoria_detalle}
+          Subcategoría: ${subcategoryObj.nombre_subcategoria}
+          Detalle: ${subcategoryObj.subcategoria_detalle.nombre_subcategoria_detalle}
           Área: ${populatedTicket.area.area}
           Prioridad: ${priority}
           Estado: ${savedTicket.status}
@@ -410,8 +471,8 @@ export const createTicket = async (req, res) => {
             Número de Ticket: ${savedTicket.ticketNumber}
             Descripción: ${description}
             Categoría: ${populatedTicket.category.nombre_categoria}
-            Subcategoría: ${subcategory.nombre_subcategoria}
-            Detalle: ${subcategory.subcategoria_detalle.nombre_subcategoria_detalle}
+            Subcategoría: ${subcategoryObj.nombre_subcategoria}
+            Detalle: ${subcategoryObj.subcategoria_detalle.nombre_subcategoria_detalle}
             Área: ${populatedTicket.area.area}
             Prioridad: ${priority}
             Estado: ${savedTicket.status}

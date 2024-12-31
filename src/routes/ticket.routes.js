@@ -107,7 +107,7 @@ const upload = multer({
  *       401:
  *         description: No autorizado
  */
-ticketRoutes.post('/tickets', authMiddleware, validateTicket, createTicket);
+ticketRoutes.post('/tickets', authMiddleware, createTicket);
 
 /**
  * @swagger
