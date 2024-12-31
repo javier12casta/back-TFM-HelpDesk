@@ -5,14 +5,30 @@ export const userController = {
   // Crear usuario
   createUser: async (req, res) => {
     try {
-      const newUser = new User(req.body);
+      // Buscar el rol por nombre
+      const roleName = req.body.role || 'user'; // Si no se especifica rol, usar 'user' por defecto
+      const role = await Role.findOne({ name: roleName.toLowerCase() });
+      
+      if (!role) {
+        return res.status(400).json({
+          success: false,
+          message: 'Rol no válido'
+        });
+      }
+
+      // Crear el nuevo usuario con el ID del rol encontrado
+      const userData = {
+        ...req.body,
+        role: role._id // Reemplazar el nombre del rol con su ID
+      };
+
+      const newUser = new User(userData);
       const savedUser = await newUser.save();
       const userResponse = savedUser.toObject();
       delete userResponse.password;
       
-      // Obtener el nombre del rol
-      const role = await Role.findById(savedUser.role);
-      userResponse.roleName = role ? role.name : null;
+      // Agregar el nombre del rol a la respuesta
+      userResponse.roleName = role.name;
       
       res.status(201).json({
         success: true,

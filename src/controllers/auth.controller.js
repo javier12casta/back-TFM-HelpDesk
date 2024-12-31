@@ -32,7 +32,8 @@ export const register = async (req, res) => {
     if (!userRole) {
       return res.status(500).json({ msg: 'Default role not found' });
     }
-
+    console.log(userRole._id);
+    
     // Crear nuevo usuario con el ObjectId del rol
     const user = new User({
       username,
