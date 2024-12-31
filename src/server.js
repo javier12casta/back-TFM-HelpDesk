@@ -8,7 +8,7 @@ import { userRoutes } from './routes/user.routes.js';
 import { ticketRoutes } from './routes/ticket.routes.js';
 import { categoryRoutes } from './routes/category.routes.js';
 import { areaRoutes } from './routes/area.routes.js';
-import { reportRoutes } from './routes/report.routes.js';
+import reportRoutes from './routes/report.routes.js';
 import swaggerUi from 'swagger-ui-express';
 import { swaggerSpec } from './config/swagger.config.js';
 import http from 'http';

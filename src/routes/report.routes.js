@@ -1,186 +1,214 @@
-import express from 'express';
+import { Router } from 'express';
 import {
   getTicketStats,
-  getAgentPerformance,
-  getCategoryDistribution,
-  getPriorityDistribution,
-  getTimeSeriesData
+  getAreaStats,
+  getCategoryStats,
+  downloadExcelReport
 } from '../controllers/report.controller.js';
-import { 
-  validateReportQuery, 
-  validateAgentPerformanceQuery 
-} from '../middlewares/validation.middleware.js';
-import { authMiddleware } from '../middlewares/auth.middleware.js';
 
-const reportRoutes = express.Router();
+export const reportRoutes = Router();
 
 /**
  * @swagger
- * /api/reports/tickets/stats:
+ * /api/reports/tickets:
  *   get:
- *     summary: Obtener estadísticas de tickets
+ *     summary: Obtener estadísticas generales de tickets
  *     tags: [Reportes]
- *     security:
- *       - bearerAuth: []
  *     parameters:
  *       - in: query
  *         name: startDate
  *         schema:
  *           type: string
  *           format: date
- *         description: Fecha de inicio
+ *         description: Fecha de inicio (YYYY-MM-DD)
  *       - in: query
  *         name: endDate
  *         schema:
  *           type: string
  *           format: date
- *         description: Fecha de fin
+ *         description: Fecha de fin (YYYY-MM-DD)
+ *       - in: query
+ *         name: area
+ *         schema:
+ *           type: string
+ *         description: ID del área para filtrar
+ *       - in: query
+ *         name: category
+ *         schema:
+ *           type: string
+ *         description: Categoría para filtrar
  *     responses:
  *       200:
  *         description: Estadísticas obtenidas exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 totalTickets:
+ *                   type: number
+ *                   description: Total de tickets
+ *                 resolvedTickets:
+ *                   type: number
+ *                   description: Tickets resueltos
+ *                 pendingTickets:
+ *                   type: number
+ *                   description: Tickets pendientes
+ *                 inProgressTickets:
+ *                   type: number
+ *                   description: Tickets en proceso
+ *                 avgResolutionTime:
+ *                   type: number
+ *                   description: Tiempo promedio de resolución en horas
+ *                 resolutionRate:
+ *                   type: number
+ *                   description: Tasa de resolución en porcentaje
+ *       500:
+ *         description: Error del servidor
  */
-reportRoutes.get('/reports/tickets/stats', 
-  authMiddleware, 
-  validateReportQuery, 
-  getTicketStats
-);
+reportRoutes.get('/reports/tickets', getTicketStats);
 
 /**
  * @swagger
- * /api/reports/agents/performance:
+ * /api/reports/areas:
  *   get:
- *     summary: Obtener rendimiento de agentes
+ *     summary: Obtener estadísticas de tickets por área
  *     tags: [Reportes]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: query
- *         name: agentId
- *         schema:
- *           type: string
- *         required: true
- *         description: ID del agente
- *       - in: query
- *         name: startDate
- *         schema:
- *           type: string
- *           format: date
- *         description: Fecha de inicio
- *       - in: query
- *         name: endDate
- *         schema:
- *           type: string
- *           format: date
- *         description: Fecha de fin
- *     responses:
- *       200:
- *         description: Estadísticas de rendimiento del agente
- */
-reportRoutes.get('/reports/agents/performance', 
-  authMiddleware, 
-  validateAgentPerformanceQuery, 
-  getAgentPerformance
-);
-
-/**
- * @swagger
- * /api/reports/categories/distribution:
- *   get:
- *     summary: Obtener distribución de tickets por categoría
- *     tags: [Reportes]
- *     security:
- *       - bearerAuth: []
  *     parameters:
  *       - in: query
  *         name: startDate
  *         schema:
  *           type: string
  *           format: date
- *         description: Fecha de inicio
+ *         description: Fecha de inicio (YYYY-MM-DD)
  *       - in: query
  *         name: endDate
  *         schema:
  *           type: string
  *           format: date
- *         description: Fecha de fin
+ *         description: Fecha de fin (YYYY-MM-DD)
  *     responses:
  *       200:
- *         description: Distribución de tickets por categoría
+ *         description: Estadísticas por área obtenidas exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   area:
+ *                     type: string
+ *                     description: Nombre del área
+ *                   total:
+ *                     type: number
+ *                     description: Total de tickets
+ *                   resolved:
+ *                     type: number
+ *                     description: Tickets resueltos
+ *                   pending:
+ *                     type: number
+ *                     description: Tickets pendientes
+ *                   inProgress:
+ *                     type: number
+ *                     description: Tickets en proceso
+ *                   resolutionRate:
+ *                     type: number
+ *                     description: Tasa de resolución en porcentaje
+ *       500:
+ *         description: Error del servidor
  */
-reportRoutes.get('/reports/categories/distribution', 
-  authMiddleware, 
-  validateReportQuery, 
-  getCategoryDistribution
-);
+reportRoutes.get('/reports/areas', getAreaStats);
 
 /**
  * @swagger
- * /api/reports/priority/distribution:
+ * /api/reports/categories:
  *   get:
- *     summary: Obtener distribución de tickets por prioridad
+ *     summary: Obtener estadísticas de tickets por categoría
  *     tags: [Reportes]
- *     security:
- *       - bearerAuth: []
  *     parameters:
  *       - in: query
  *         name: startDate
  *         schema:
  *           type: string
  *           format: date
- *         description: Fecha de inicio
+ *         description: Fecha de inicio (YYYY-MM-DD)
  *       - in: query
  *         name: endDate
  *         schema:
  *           type: string
  *           format: date
- *         description: Fecha de fin
+ *         description: Fecha de fin (YYYY-MM-DD)
  *     responses:
  *       200:
- *         description: Distribución de tickets por prioridad
+ *         description: Estadísticas por categoría obtenidas exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   _id:
+ *                     type: string
+ *                     description: Nombre de la categoría
+ *                   total:
+ *                     type: number
+ *                     description: Total de tickets
+ *                   resolved:
+ *                     type: number
+ *                     description: Tickets resueltos
+ *                   pending:
+ *                     type: number
+ *                     description: Tickets pendientes
+ *                   inProgress:
+ *                     type: number
+ *                     description: Tickets en proceso
+ *       500:
+ *         description: Error del servidor
  */
-reportRoutes.get('/reports/priority/distribution', 
-  authMiddleware, 
-  validateReportQuery, 
-  getPriorityDistribution
-);
+reportRoutes.get('/reports/categories', getCategoryStats);
 
 /**
  * @swagger
- * /api/reports/timeseries:
+ * /api/reports/download:
  *   get:
- *     summary: Obtener datos de series temporales de tickets
+ *     summary: Descargar reporte de tickets en Excel
  *     tags: [Reportes]
- *     security:
- *       - bearerAuth: []
  *     parameters:
  *       - in: query
  *         name: startDate
  *         schema:
  *           type: string
  *           format: date
- *         required: true
- *         description: Fecha de inicio
+ *         description: Fecha de inicio (YYYY-MM-DD)
  *       - in: query
  *         name: endDate
  *         schema:
  *           type: string
  *           format: date
- *         required: true
- *         description: Fecha de fin
+ *         description: Fecha de fin (YYYY-MM-DD)
  *       - in: query
- *         name: groupBy
+ *         name: area
  *         schema:
  *           type: string
- *           enum: [day, week, month]
- *         description: Agrupación temporal de los datos
+ *         description: ID del área para filtrar
+ *       - in: query
+ *         name: category
+ *         schema:
+ *           type: string
+ *         description: Categoría para filtrar
  *     responses:
  *       200:
- *         description: Series temporales de tickets
+ *         description: Archivo Excel generado exitosamente
+ *         content:
+ *           application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+ *             schema:
+ *               type: string
+ *               format: binary
+ *       500:
+ *         description: Error del servidor
  */
-reportRoutes.get('/reports/timeseries', 
-  authMiddleware, 
-  validateReportQuery, 
-  getTimeSeriesData
-);
+reportRoutes.get('/reports/download', downloadExcelReport);
 
-export { reportRoutes };
+export default reportRoutes;
