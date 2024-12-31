@@ -28,7 +28,9 @@ export const register = async (req, res) => {
       name,
       email,
       password,
-      role: userRole._id, // Asignar el ObjectId del rol
+      role: {
+        "$oid": userRole._id
+      },
       mfaEnabled: mfaEnabled || false,
       mfaSetup: false,
       mfaValidated: false
